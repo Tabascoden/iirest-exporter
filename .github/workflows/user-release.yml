@@ -1,4 +1,4 @@
-name: User release package
+name: User release folder
 
 on:
   workflow_dispatch:
@@ -20,12 +20,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build user package
+      - name: Build user folder
         run: npm run release:user
 
-      - name: Upload user package
+      - name: Upload user folder
         uses: actions/upload-artifact@v4
         with:
-          name: PriceParse-user-package
-          path: .output/user-release/PriceParse-*.zip
+          name: PriceParse-user-folder
+          path: FOR_USER/PriceParse-*
           if-no-files-found: error
