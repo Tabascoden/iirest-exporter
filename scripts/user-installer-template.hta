@@ -1,0 +1,327 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="x-ua-compatible" content="IE=11">
+  <title>PriceParse Installer</title>
+  <hta:application
+    id="PriceParseInstaller"
+    applicationname="PriceParse Installer"
+    border="thin"
+    caption="yes"
+    maximizebutton="no"
+    minimizebutton="yes"
+    scroll="no"
+    singleinstance="yes"
+    sysmenu="yes"
+    windowstate="normal"
+  />
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #f5f1e8;
+      color: #1d2830;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-size: 14px;
+    }
+
+    .shell {
+      padding: 28px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 5px 9px;
+      border: 1px solid #bfd1c7;
+      background: #e6f0ea;
+      color: #25583f;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 16px 0 8px;
+      color: #142129;
+      font-size: 29px;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+
+    .lead {
+      margin: 0 0 18px;
+      color: #4b5b65;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .panel {
+      margin: 18px 0;
+      padding: 18px;
+      border: 1px solid #d8d0c2;
+      background: #fffbf3;
+    }
+
+    .step {
+      margin: 0 0 11px;
+      line-height: 1.4;
+    }
+
+    .step strong {
+      color: #142129;
+    }
+
+    .path {
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: 9px;
+      padding: 10px 11px;
+      border: 1px solid #c4d1ca;
+      background: #ffffff;
+      color: #26323a;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+    }
+
+    .actions {
+      margin-top: 18px;
+    }
+
+    button {
+      min-width: 205px;
+      margin-right: 8px;
+      padding: 11px 14px;
+      border: 1px solid #2f6f55;
+      background: #2f6f55;
+      color: #ffffff;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: hand;
+    }
+
+    button.secondary {
+      border-color: #b7c5bd;
+      background: #ffffff;
+      color: #2f4d41;
+    }
+
+    button:disabled {
+      border-color: #a8afb3;
+      background: #a8afb3;
+      color: #ffffff;
+      cursor: default;
+    }
+
+    .status {
+      min-height: 38px;
+      margin-top: 16px;
+      color: #2f6f55;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .status.error {
+      color: #b42318;
+    }
+  </style>
+  <script language="javascript">
+    var extensionVersion = "__PRICEPARSE_VERSION__";
+    var extensionPayloadBase64 = "__EXTENSION_PAYLOAD_BASE64__";
+
+    function getShell() {
+      return new ActiveXObject("WScript.Shell");
+    }
+
+    function getFileSystem() {
+      return new ActiveXObject("Scripting.FileSystemObject");
+    }
+
+    function getInstallRoot() {
+      return getShell().ExpandEnvironmentStrings("%LOCALAPPDATA%") + "\\PriceParse";
+    }
+
+    function getExtensionPath() {
+      return getInstallRoot() + "\\Extension";
+    }
+
+    function getPayloadZipPath() {
+      return getShell().ExpandEnvironmentStrings("%TEMP%") + "\\PriceParse-extension-" + extensionVersion + ".zip";
+    }
+
+    function setStatus(message, isError) {
+      var status = document.getElementById("status");
+      status.className = isError ? "status error" : "status";
+      status.innerHTML = message;
+    }
+
+    function getErrorText(error) {
+      if (error && error.description) {
+        return error.description;
+      }
+      if (error && error.message) {
+        return error.message;
+      }
+      return "Неизвестная ошибка.";
+    }
+
+    function writePayloadZip(zipPath) {
+      var xml;
+      try {
+        xml = new ActiveXObject("MSXML2.DOMDocument.6.0");
+      } catch (error) {
+        xml = new ActiveXObject("MSXML2.DOMDocument");
+      }
+
+      var node = xml.createElement("payload");
+      node.dataType = "bin.base64";
+      node.text = extensionPayloadBase64;
+
+      var stream = new ActiveXObject("ADODB.Stream");
+      stream.Type = 1;
+      stream.Open();
+      stream.Write(node.nodeTypedValue);
+      stream.SaveToFile(zipPath, 2);
+      stream.Close();
+    }
+
+    function prepareExtensionFiles() {
+      var files = getFileSystem();
+      var installRoot = getInstallRoot();
+      var extensionPath = getExtensionPath();
+      var zipPath = getPayloadZipPath();
+
+      if (!files.FolderExists(installRoot)) {
+        files.CreateFolder(installRoot);
+      }
+      if (files.FolderExists(extensionPath)) {
+        files.DeleteFolder(extensionPath, true);
+      }
+      files.CreateFolder(extensionPath);
+      if (files.FileExists(zipPath)) {
+        files.DeleteFile(zipPath, true);
+      }
+
+      writePayloadZip(zipPath);
+
+      var shellApp = new ActiveXObject("Shell.Application");
+      var source = shellApp.NameSpace(zipPath);
+      var target = shellApp.NameSpace(extensionPath);
+
+      if (!source || !target) {
+        throw new Error("Не удалось открыть временный архив расширения.");
+      }
+
+      target.CopyHere(source.Items(), 1556);
+      return zipPath;
+    }
+
+    function copyPath(path) {
+      var pathInput = document.getElementById("extensionPath");
+      pathInput.value = path;
+      pathInput.select();
+
+      try {
+        window.clipboardData.setData("Text", path);
+        return true;
+      } catch (error) {
+        setStatus("Путь не удалось скопировать автоматически. Выделите поле с путем и нажмите Ctrl+C.", true);
+        return false;
+      }
+    }
+
+    function openChromeExtensions() {
+      var shell = getShell();
+      var files = getFileSystem();
+      var candidates = [
+        shell.ExpandEnvironmentStrings("%ProgramFiles%") + "\\Google\\Chrome\\Application\\chrome.exe",
+        shell.ExpandEnvironmentStrings("%ProgramFiles(x86)%") + "\\Google\\Chrome\\Application\\chrome.exe",
+        shell.ExpandEnvironmentStrings("%LocalAppData%") + "\\Google\\Chrome\\Application\\chrome.exe"
+      ];
+
+      for (var i = 0; i < candidates.length; i++) {
+        if (files.FileExists(candidates[i])) {
+          shell.Run("\"" + candidates[i] + "\" chrome://extensions", 1, false);
+          return;
+        }
+      }
+
+      shell.Run("chrome://extensions", 1, false);
+    }
+
+    function finishInstall(zipPath, attemptsLeft) {
+      var files = getFileSystem();
+      var extensionPath = getExtensionPath();
+      var manifestPath = extensionPath + "\\manifest.json";
+
+      if (files.FileExists(manifestPath)) {
+        if (files.FileExists(zipPath)) {
+          files.DeleteFile(zipPath, true);
+        }
+        copyPath(extensionPath);
+        openChromeExtensions();
+        document.getElementById("installButton").disabled = false;
+        setStatus("Готово. Путь скопирован, Chrome открыт. Нажмите Load unpacked / Загрузить распакованное и выберите подготовленную папку.", false);
+        return;
+      }
+
+      if (attemptsLeft <= 0) {
+        document.getElementById("installButton").disabled = false;
+        setStatus("Не удалось подготовить файлы расширения. Закройте окно, запустите установщик еще раз и разрешите Windows выполнить файл.", true);
+        return;
+      }
+
+      window.setTimeout(function () {
+        finishInstall(zipPath, attemptsLeft - 1);
+      }, 350);
+    }
+
+    function startInstall() {
+      document.getElementById("installButton").disabled = true;
+      document.getElementById("extensionPath").value = getExtensionPath();
+      setStatus("Подготавливаю файлы расширения в профиле Windows...", false);
+
+      try {
+        var zipPath = prepareExtensionFiles();
+        finishInstall(zipPath, 30);
+      } catch (error) {
+        document.getElementById("installButton").disabled = false;
+        setStatus("Ошибка установки: " + getErrorText(error), true);
+      }
+    }
+
+    function init() {
+      window.resizeTo(640, 560);
+      document.getElementById("version").innerHTML = extensionVersion;
+      document.getElementById("extensionPath").value = getExtensionPath();
+      setStatus("Готов к установке. Можно запускать этот файл даже прямо из ZIP.", false);
+    }
+  </script>
+</head>
+<body onload="init()">
+  <div class="shell">
+    <div class="badge">Chrome extension</div>
+    <h1>Установка PriceParse <span id="version"></span></h1>
+    <p class="lead">Установщик подготовит файлы расширения в обычной папке Windows и откроет страницу расширений Chrome.</p>
+
+    <div class="panel">
+      <p class="step"><strong>1.</strong> Нажмите кнопку подготовки.</p>
+      <p class="step"><strong>2.</strong> В Chrome включите <strong>Developer mode / Режим разработчика</strong>.</p>
+      <p class="step"><strong>3.</strong> Нажмите <strong>Load unpacked / Загрузить распакованное</strong> и выберите путь ниже.</p>
+      <input id="extensionPath" class="path" type="text" readonly>
+    </div>
+
+    <div class="actions">
+      <button id="installButton" onclick="startInstall()">Подготовить установку</button>
+      <button class="secondary" onclick="copyPath(getExtensionPath())">Скопировать путь</button>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+</body>
+</html>
