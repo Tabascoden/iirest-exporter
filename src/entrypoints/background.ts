@@ -62,13 +62,6 @@ interface ActiveRun {
   currentTabId?: number;
 }
 
-interface ActiveTabSnapshot {
-  previousTabId: number;
-  previousWindowId: number;
-  supplierTabId: number;
-  supplierWindowId: number;
-}
-
 let activeRun: ActiveRun | null = null;
 
 export default defineBackground(() => {
@@ -355,11 +348,10 @@ async function processRun(run: ActiveRun): Promise<void> {
       appendLog(run, `${supplier.name}: поиск "${query}"`, "info", supplierId, query);
       await persistRun(run);
 
-      let activeTabSnapshot: ActiveTabSnapshot | null = null;
       try {
         const tab = await findOrOpenSupplierTab(supplier);
         run.currentTabId = tab.id;
-        activeTabSnapshot = await activateSupplierTabForAutomation(tab.id, supplier);
+        await ensureSupplierTabVisibleForAutomation(tab.id, supplier);
         await prepareSupplierTabForQuery(tab.id, supplier, query);
         await ensureContentReady(tab.id);
         if (!(await waitForSupplierPageVisible(tab.id, supplier))) {
@@ -446,10 +438,6 @@ async function processRun(run: ActiveRun): Promise<void> {
           query,
           error instanceof Error ? error.message : "Неизвестная ошибка поставщика"
         );
-      } finally {
-        if (!run.paused && !run.stopped) {
-          await restoreActiveTab(activeTabSnapshot);
-        }
       }
 
       run.completed += 1;
@@ -457,9 +445,7 @@ async function processRun(run: ActiveRun): Promise<void> {
       updateCompletedProgress(run);
       await persistRun(run);
 
-      if (!isRunDone(run) && !run.stopped) {
-        await sleep(run.settings.delayBetweenQueriesMs);
-      }
+      // Continue immediately; supplier pages already wait for their own load/settle states.
     }
 
     if (run.stopped) {
@@ -507,11 +493,10 @@ async function processPurchaseUploadRun(run: ActiveRun): Promise<void> {
       appendLog(run, `${supplier.name}: добавление "${item.name}" x ${item.quantity}`, "info", supplierId, item.name);
       await persistRun(run);
 
-      let activeTabSnapshot: ActiveTabSnapshot | null = null;
       try {
         const tab = await findOrOpenSupplierTab(supplier);
         run.currentTabId = tab.id;
-        activeTabSnapshot = await activateSupplierTabForAutomation(tab.id, supplier);
+        await ensureSupplierTabVisibleForAutomation(tab.id, supplier);
         await prepareSupplierTabForQuery(tab.id, supplier, item.name);
         await ensureContentReady(tab.id);
         if (!(await waitForSupplierPageVisible(tab.id, supplier))) {
@@ -607,19 +592,13 @@ async function processPurchaseUploadRun(run: ActiveRun): Promise<void> {
           item,
           error instanceof Error ? error.message : "Неизвестная ошибка поставщика"
         );
-      } finally {
-        if (!run.paused && !run.stopped) {
-          await restoreActiveTab(activeTabSnapshot);
-        }
       }
 
       run.completed += 1;
       updateCompletedProgress(run);
       await persistRun(run);
 
-      if (!isRunDone(run) && !run.stopped) {
-        await sleep(run.settings.delayBetweenQueriesMs);
-      }
+      // Continue immediately; supplier pages already wait for their own load/settle states.
     }
 
     if (run.stopped) {
@@ -881,28 +860,12 @@ async function ensureContentReady(tabId: number): Promise<void> {
   }
 }
 
-async function activateSupplierTabForAutomation(
-  tabId: number,
-  supplier: SupplierInfo
-): Promise<ActiveTabSnapshot | null> {
+async function ensureSupplierTabVisibleForAutomation(tabId: number, supplier: SupplierInfo): Promise<void> {
   if (!VISIBLE_TAB_SUPPLIERS.has(supplier.id)) {
-    return null;
+    return;
   }
 
-  const targetTab = await tabsGet(tabId);
-  const previousTab = await getLastFocusedActiveTab().catch(() => null);
-  const snapshot =
-    previousTab && previousTab.id !== tabId
-      ? {
-          previousTabId: previousTab.id,
-          previousWindowId: previousTab.windowId,
-          supplierTabId: tabId,
-          supplierWindowId: targetTab.windowId
-        }
-      : null;
-
   await activateTab(tabId);
-  return snapshot;
 }
 
 async function waitForSupplierPageVisible(tabId: number, supplier: SupplierInfo): Promise<boolean> {
@@ -933,29 +896,6 @@ async function activateTab(tabId: number): Promise<void> {
   if (windowId != null) {
     await windowsUpdate(windowId, { focused: true }).catch(() => undefined);
   }
-}
-
-async function restoreActiveTab(snapshot: ActiveTabSnapshot | null): Promise<void> {
-  if (!snapshot) {
-    return;
-  }
-
-  const lastFocusedTab = await getLastFocusedActiveTab().catch(() => null);
-  if (lastFocusedTab?.id !== snapshot.supplierTabId || lastFocusedTab.windowId !== snapshot.supplierWindowId) {
-    return;
-  }
-
-  await tabsUpdate(snapshot.previousTabId, { active: true }).catch(() => undefined);
-  await windowsUpdate(snapshot.previousWindowId, { focused: true }).catch(() => undefined);
-}
-
-async function getLastFocusedActiveTab(): Promise<chrome.tabs.Tab & { id: number; windowId: number }> {
-  const [tab] = await tabsQuery({ active: true, lastFocusedWindow: true });
-  if (tab?.id == null) {
-    throw new Error("Chrome did not return the active tab.");
-  }
-
-  return tab as chrome.tabs.Tab & { id: number; windowId: number };
 }
 
 async function abortActiveContent(run: ActiveRun): Promise<void> {

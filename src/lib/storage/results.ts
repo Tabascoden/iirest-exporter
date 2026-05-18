@@ -24,7 +24,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   selectedSuppliers: ["gfc", "smartpro", "metro"],
   includeTechnicalColumns: true,
   maxPagesPerQuery: 25,
-  delayBetweenQueriesMs: 1000,
+  delayBetweenQueriesMs: 0,
   delayBetweenPagesMs: 700
 };
 
