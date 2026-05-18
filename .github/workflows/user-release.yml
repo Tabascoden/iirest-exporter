@@ -1,7 +1,13 @@
-name: User release folder
+name: User release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
 
 jobs:
   package:
@@ -22,6 +28,44 @@ jobs:
 
       - name: Build user folder
         run: npm run release:user
+
+      - name: Package user zip
+        shell: pwsh
+        run: |
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $version = $package.version
+          $zipPath = Join-Path $env:RUNNER_TEMP "iirest-sites-plugin.zip"
+          if (Test-Path -LiteralPath $zipPath) {
+            Remove-Item -LiteralPath $zipPath -Force
+          }
+
+          tar -a -cf $zipPath -C "FOR_USER" "iiRest Exporter"
+
+          "EXTENSION_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ZIP_PATH=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Verify user zip
+        shell: pwsh
+        run: |
+          tar -tf $env:ZIP_PATH | Select-String -SimpleMatch "iiRest Exporter/_iirest-exporter/extension/manifest.json"
+          tar -tf $env:ZIP_PATH | Select-String -SimpleMatch "iiRest Exporter/Install iiRest Exporter.hta"
+
+      - name: Publish user release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "site-plugin-latest"
+          $title = "iiRest Exporter $env:EXTENSION_VERSION"
+          $notes = "Latest user package for downloading the iiRest Chrome extension from the main app."
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $env:ZIP_PATH --clobber
+            gh release edit $tag --title $title --notes $notes
+          } else {
+            gh release create $tag $env:ZIP_PATH --title $title --notes $notes --target $env:GITHUB_SHA
+          }
 
       - name: Upload user folder
         uses: actions/upload-artifact@v4
