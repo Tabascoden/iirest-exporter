@@ -9,6 +9,7 @@ export interface ExtensionSettings {
   maxPagesPerQuery: number;
   delayBetweenQueriesMs: number;
   delayBetweenPagesMs: number;
+  iirestBaseUrl: string;
 }
 
 export interface ExtensionState {
@@ -25,7 +26,8 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   includeTechnicalColumns: true,
   maxPagesPerQuery: 25,
   delayBetweenQueriesMs: 0,
-  delayBetweenPagesMs: 700
+  delayBetweenPagesMs: 700,
+  iirestBaseUrl: "https://app.iirest.ru"
 };
 
 export const DEFAULT_PROGRESS: RunProgress = {

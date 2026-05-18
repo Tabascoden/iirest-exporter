@@ -74,6 +74,17 @@ button:disabled {
   background: var(--accent-dark);
 }
 
+.danger-button {
+  border-color: #fecaca;
+  background: #fff5f5;
+  color: var(--danger);
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: #fee2e2;
+}
+
 .app-shell {
   display: grid;
   gap: 12px;
@@ -164,7 +175,8 @@ h1 {
 .notice,
 .panel-section,
 .progress-grid,
-.actions {
+.actions,
+.import-choice {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
@@ -172,9 +184,28 @@ h1 {
 }
 
 .notice {
+  display: grid;
+  gap: 8px;
   padding: 10px 12px;
   color: var(--danger);
   font-size: 13px;
+}
+
+.notice-actionable {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: var(--warn);
+}
+
+.notice-action {
+  width: fit-content;
+  min-height: 32px;
+  padding: 0 10px;
+  border-color: #fdba74;
+  background: #ffffff;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .panel-section {
@@ -204,6 +235,16 @@ textarea {
 }
 
 select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: var(--text);
+  background: #ffffff;
+}
+
+.url-input {
   width: 100%;
   min-height: 38px;
   border: 1px solid var(--line);
@@ -355,6 +396,38 @@ input:focus {
 
 .actions button {
   width: 100%;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.import-choice {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.import-choice-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.import-choice-header p,
+.import-warning {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.import-choice-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.import-choice-actions button {
   min-width: 0;
   padding: 0 8px;
 }

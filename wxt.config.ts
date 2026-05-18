@@ -15,7 +15,10 @@ export default defineConfig({
       "https://smartpro.ru/*",
       "https://*.smartpro.ru/*",
       "https://metro-cc.ru/*",
-      "https://*.metro-cc.ru/*"
+      "https://*.metro-cc.ru/*",
+      "https://app.iirest.ru/*",
+      "http://localhost/*",
+      "http://127.0.0.1/*"
     ],
     icons: {
       "16": "icon-16.png",
