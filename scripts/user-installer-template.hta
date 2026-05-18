@@ -132,7 +132,6 @@
     }
   </style>
   <script language="javascript">
-    var extensionVersion = "__IIREST_EXPORTER_VERSION__";
     var chromePage = "chrome://extensions";
 
     function getShell() {
@@ -239,7 +238,6 @@
 
     function init() {
       window.resizeTo(670, 540);
-      document.getElementById("version").innerHTML = extensionVersion;
       document.getElementById("extensionPath").value = getExtensionPath();
       checkExtensionPath();
     }
@@ -248,7 +246,7 @@
 <body onload="init()">
   <div class="shell">
     <div class="badge">Chrome extension</div>
-    <h1>Установка iiRest Exporter <span id="version"></span></h1>
+    <h1>Установка iiRest Exporter</h1>
     <p class="lead">Расширение уже собрано в этой папке. Это окно только показывает шаги и копирует правильные адреса.</p>
 
     <div class="panel">

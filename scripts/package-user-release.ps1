@@ -3,9 +3,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $projectRoot
 
-$packageJson = Get-Content -LiteralPath (Join-Path $projectRoot "package.json") -Raw | ConvertFrom-Json
-$version = $packageJson.version
-$releaseName = "iiRest Exporter-$version"
+$releaseName = "iiRest Exporter"
 
 $wxtOutput = Join-Path $projectRoot ".output\chrome-mv3"
 $releaseRoot = Join-Path $projectRoot "FOR_USER"
@@ -26,6 +24,9 @@ if (-not (Test-Path -LiteralPath $templatePath)) {
   throw "Installer template was not found at $templatePath"
 }
 
+Get-ChildItem -LiteralPath $releaseRoot -Filter "iiRest Exporter-*" -Force -ErrorAction SilentlyContinue |
+  Remove-Item -Recurse -Force
+
 if (Test-Path -LiteralPath $packageRoot) {
   Remove-Item -LiteralPath $packageRoot -Recurse -Force
 }
@@ -34,8 +35,7 @@ New-Item -ItemType Directory -Path $extensionRoot -Force | Out-Null
 Copy-Item -Path (Join-Path $wxtOutput "*") -Destination $extensionRoot -Recurse -Force
 
 $installerTemplate = Get-Content -LiteralPath $templatePath -Raw -Encoding UTF8
-$installer = $installerTemplate.Replace("__IIREST_EXPORTER_VERSION__", $version)
-Set-Content -LiteralPath (Join-Path $packageRoot "Install iiRest Exporter.hta") -Value $installer -Encoding UTF8
+Set-Content -LiteralPath (Join-Path $packageRoot "Install iiRest Exporter.hta") -Value $installerTemplate -Encoding UTF8
 
 $workItem = Get-Item -LiteralPath $workRoot -Force
 $workItem.Attributes = $workItem.Attributes -bor [System.IO.FileAttributes]::Hidden
