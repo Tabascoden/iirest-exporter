@@ -70,6 +70,7 @@ export const metroAdapter = createDomSupplierAdapter({
   name: "METRO",
   startUrl: "https://online.metro-cc.ru/",
   loginUrl: "https://online.metro-cc.ru/login",
+  htmlSearchUrl: (query) => `https://online.metro-cc.ru/search?q=${encodeURIComponent(query)}`,
   selectors: {
     searchInput: searchInputSelectors,
     productRows: productRowSelectors,

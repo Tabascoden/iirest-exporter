@@ -353,22 +353,24 @@ async function performDomSearch(
   query: string,
   options: { signal?: AbortSignal; maxPages: number; delayMs: number }
 ): Promise<SupplierSearchResult[]> {
-  await waitForSupplierUiReady(config, options.signal);
+  if (!(await waitForCurrentSearchPageResults(config, query, options.signal))) {
+    await waitForSupplierUiReady(config, options.signal);
 
-  let searchInput = findVisibleSearchInput(config);
-  if (!searchInput || !isVisible(searchInput)) {
-    throw createDomError(config, "Не найдено доступное поле поиска.");
-  }
+    let searchInput = findVisibleSearchInput(config);
+    if (!searchInput || !isVisible(searchInput)) {
+      throw createDomError(config, "Не найдено доступное поле поиска.");
+    }
 
-  searchInput = await activateSearchInput(config, searchInput, options.signal);
-  const initialSignature = getPageSignature(config);
-  setInputValue(searchInput, query);
-  submitSearch(searchInput);
+    searchInput = await activateSearchInput(config, searchInput, options.signal);
+    const initialSignature = getPageSignature(config);
+    setInputValue(searchInput, query);
+    submitSearch(searchInput);
 
-  if (config.id === "smartpro") {
-    await waitForSmartProSearchSettled(config, query, options.signal);
-  } else {
-    await waitForSearchReaction(config, initialSignature, options.signal);
+    if (config.id === "smartpro") {
+      await waitForSmartProSearchSettled(config, query, options.signal);
+    } else {
+      await waitForSearchReaction(config, initialSignature, options.signal);
+    }
   }
   await sleep(options.delayMs, options.signal);
 
@@ -474,8 +476,30 @@ async function addPurchaseItemToCart(
     throw createDomError(config, `Не найдена кнопка добавления в корзину для "${item.name}".`);
   }
 
+  const previousCartIndicatorText = getCartIndicatorText();
   clickElement(addButton);
-  await sleep(Math.max(500, options.delayMs), options.signal);
+  const addConfirmation = await waitForCartAddConfirmation(
+    config,
+    addButton,
+    activeRoot,
+    previousCartIndicatorText,
+    options.signal
+  );
+  if (!addConfirmation.confirmed) {
+    return {
+      supplierId: config.id,
+      supplierName: config.name,
+      sourceName: item.name,
+      requestedQuantity: item.quantity,
+      requestedPrice: item.price,
+      matchedName,
+      matchedPrice,
+      status: "error",
+      message: addConfirmation.message,
+      url: getClosestUrl(productElement) || location.href,
+      completedAt: new Date().toISOString()
+    };
+  }
 
   const quantitySet = await setRequestedQuantity(config, item.quantity, activeRoot, options.signal);
   if (!quantitySet) {
@@ -539,6 +563,11 @@ async function performCartSearch(
   query: string,
   options: { signal?: AbortSignal; delayMs: number }
 ): Promise<void> {
+  if (await waitForCurrentSearchPageResults(config, query, options.signal)) {
+    await sleep(options.delayMs, options.signal);
+    return;
+  }
+
   await waitForSupplierUiReady(config, options.signal);
 
   let searchInput = findVisibleSearchInput(config);
@@ -598,6 +627,45 @@ async function waitForSearchReaction(
   } catch {
     // Some supplier UIs render results synchronously or keep URL/text signatures stable.
   }
+}
+
+async function waitForCurrentSearchPageResults(
+  config: DomSupplierConfig,
+  query: string,
+  signal?: AbortSignal
+): Promise<boolean> {
+  if (!isCurrentSearchPageForQuery(config, query)) {
+    return false;
+  }
+
+  try {
+    await waitFor(
+      () => collectProductElements(config).some(isVisible) || hasNoResultsText(),
+      { timeoutMs: 30000, intervalMs: 300, signal }
+    );
+  } catch {
+    throw createDomError(config, `${config.name} не завершил загрузку страницы поиска по запросу "${query}".`);
+  }
+
+  return true;
+}
+
+function isCurrentSearchPageForQuery(config: DomSupplierConfig, query: string): boolean {
+  if (config.id !== "metro") {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(location.href);
+    const isSearchPath = parsed.pathname === "/search" || parsed.pathname === "/search/";
+    return isSearchPath && normalizeSearchQuery(parsed.searchParams.get("q") ?? "") === normalizeSearchQuery(query);
+  } catch {
+    return false;
+  }
+}
+
+function normalizeSearchQuery(value: string): string {
+  return normalizeWhitespace(value).toLocaleLowerCase("ru-RU");
 }
 
 async function waitForPageChange(
@@ -1084,6 +1152,73 @@ async function waitForProductNavigation(
   }
 }
 
+async function waitForCartAddConfirmation(
+  config: DomSupplierConfig,
+  addButton: HTMLElement,
+  preferredRoot: ParentNode,
+  previousCartIndicatorText: string,
+  signal?: AbortSignal
+): Promise<{ confirmed: boolean; message: string }> {
+  const roots = preferredRoot === document ? [document] : [preferredRoot, document];
+
+  try {
+    const result = await waitFor(
+      () => {
+        const blockingMessage = detectCartBlockingPrompt(config);
+        if (blockingMessage) {
+          return { confirmed: false, message: blockingMessage };
+        }
+
+        if (findQuantityInput(config, roots) || hasQuantityControl(roots)) {
+          return { confirmed: true, message: "" };
+        }
+
+        if (!document.contains(addButton) || !isVisible(addButton)) {
+          return { confirmed: true, message: "" };
+        }
+
+        const currentCartIndicatorText = getCartIndicatorText();
+        if (currentCartIndicatorText && currentCartIndicatorText !== previousCartIndicatorText) {
+          return { confirmed: true, message: "" };
+        }
+
+        return null;
+      },
+      { timeoutMs: 8000, intervalMs: 250, signal }
+    );
+    return result as { confirmed: boolean; message: string };
+  } catch {
+    const blockingMessage = detectCartBlockingPrompt(config);
+    return {
+      confirmed: false,
+      message:
+        blockingMessage ||
+        `После клика по кнопке корзины ${config.name} не подтвердил добавление товара. Проверьте, не требуется ли на сайте выбрать адрес, торговую точку или условия заказа.`
+    };
+  }
+}
+
+function detectCartBlockingPrompt(config: DomSupplierConfig): string {
+  const pageText = normalizeWhitespace(document.body?.innerText ?? "").toLocaleLowerCase("ru-RU");
+
+  if (config.id === "metro" && /(укажите адрес|адрес нужен|выберите адрес|выберите магазин|выберите способ получения)/iu.test(pageText)) {
+    return "METRO запросил адрес доставки или магазин самовывоза. Откройте METRO, выберите адрес/магазин и запустите загрузку закупки повторно.";
+  }
+
+  if (
+    config.id === "smartpro" &&
+    /(выберите|укажите|заполните).{0,80}(организац|торгов|точк|поставщик|склад|адрес)/iu.test(pageText)
+  ) {
+    return "SmartPro запросил выбор организации, торговой точки, поставщика или адреса. Откройте SmartPro, заполните этот выбор и запустите загрузку повторно.";
+  }
+
+  if (/(войдите|авторизуйтесь|требуется авторизация|необходимо авторизоваться)/iu.test(pageText)) {
+    return `${config.name} запросил авторизацию перед добавлением в корзину.`;
+  }
+
+  return "";
+}
+
 async function setRequestedQuantity(
   config: DomSupplierConfig,
   quantity: string,
@@ -1142,6 +1277,45 @@ function findQuantityInput(config: DomSupplierConfig, roots: ParentNode[]): HTML
 
   candidates.sort((a, b) => b.score - a.score || a.index - b.index);
   return candidates[0]?.input ?? null;
+}
+
+function hasQuantityControl(roots: ParentNode[]): boolean {
+  const selectors = [
+    "[class*='counter']",
+    "[class*='quantity']",
+    "[data-testid*='quantity']",
+    "[data-test*='quantity']",
+    "[data-qa*='quantity']",
+    "[aria-label*='колич']",
+    "[title*='колич']",
+    "button[aria-label='+']",
+    "button[aria-label='-']"
+  ];
+
+  return roots.some((root) =>
+    queryAllUnique<HTMLElement>(selectors, root).some((element) => {
+      if (!isVisible(element) || isDisabled(element)) {
+        return false;
+      }
+
+      const descriptor = getElementDescriptor(element);
+      return /(counter|quantity|qty|колич|кол-во|\+|-|\d+)/iu.test(descriptor);
+    })
+  );
+}
+
+function getCartIndicatorText(): string {
+  return normalizeWhitespace(
+    queryAllUnique<HTMLElement>([
+      '[data-qa="header-common-cart-button"]',
+      '[data-testid*="cart"][data-testid*="button"]',
+      '[data-test*="cart"][data-test*="button"]',
+      '[class*="cart-button"]',
+      '[class*="basket-button"]'
+    ])
+      .find((element) => isVisible(element) && !isDisabled(element))
+      ?.textContent ?? ""
+  );
 }
 
 function getCartSelectors(config: DomSupplierConfig): SupplierCartSelectorConfig {

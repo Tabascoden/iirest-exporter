@@ -349,6 +349,7 @@ async function processRun(run: ActiveRun): Promise<void> {
       try {
         const tab = await findOrOpenSupplierTab(supplier);
         run.currentTabId = tab.id;
+        await prepareSupplierTabForQuery(tab.id, supplier, query);
         await ensureContentReady(tab.id);
 
         const loginResponse = await sendTabMessage<ContentResponse<{ loggedIn: boolean; reason?: string }>>(
@@ -484,6 +485,7 @@ async function processPurchaseUploadRun(run: ActiveRun): Promise<void> {
       try {
         const tab = await findOrOpenSupplierTab(supplier);
         run.currentTabId = tab.id;
+        await prepareSupplierTabForQuery(tab.id, supplier, item.name);
         await ensureContentReady(tab.id);
 
         const loginResponse = await sendTabMessage<ContentResponse<{ loggedIn: boolean; reason?: string }>>(
@@ -775,7 +777,7 @@ async function findOrOpenSupplierTab(supplier: SupplierInfo): Promise<chrome.tab
     if (tab.id == null || !tab.url) {
       return false;
     }
-    return supplier.hostPatterns.some((host) => isUrlOnHost(tab.url ?? "", host));
+    return isUsableSupplierTab(tab.url, supplier);
   });
 
   const tab = existing ?? (await tabsCreate({ url: supplier.startUrl, active: false }));
@@ -785,6 +787,41 @@ async function findOrOpenSupplierTab(supplier: SupplierInfo): Promise<chrome.tab
 
   await waitForTabComplete(tab.id);
   return tab as chrome.tabs.Tab & { id: number };
+}
+
+async function prepareSupplierTabForQuery(tabId: number, supplier: SupplierInfo, query: string): Promise<void> {
+  const targetUrl = supplier.searchUrl?.(query);
+  if (!targetUrl) {
+    return;
+  }
+
+  const currentTab = await tabsGet(tabId).catch(() => undefined);
+  if (currentTab?.url === targetUrl) {
+    return;
+  }
+
+  await tabsUpdate(tabId, { url: targetUrl });
+  await waitForTabComplete(tabId);
+}
+
+function isUsableSupplierTab(url: string, supplier: SupplierInfo): boolean {
+  if (!supplier.hostPatterns.some((host) => isUrlOnHost(url, host))) {
+    return false;
+  }
+
+  if (!supplier.searchPathPrefix) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.pathname === supplier.searchPathPrefix ||
+      parsed.pathname.startsWith(`${supplier.searchPathPrefix}/`)
+    );
+  } catch {
+    return false;
+  }
 }
 
 async function ensureContentReady(tabId: number): Promise<void> {
