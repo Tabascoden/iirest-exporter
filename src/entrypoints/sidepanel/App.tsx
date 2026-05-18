@@ -1,8 +1,8 @@
-import { Download, FileUp, Play, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, FileUp, Play, Square, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import iirestLogo from "../../assets/iirest-logo.svg";
 import { buildSupplierCsv, buildSupplierCsvFilename } from "../../lib/export/csv";
-import type { RuntimeEvent, RuntimeRequest, RuntimeResponse, RunStatus } from "../../lib/messages";
+import type { LogEntry, RuntimeEvent, RuntimeRequest, RuntimeResponse, RunStatus } from "../../lib/messages";
 import { parsePurchaseFile } from "../../lib/purchase/file";
 import {
   DEFAULT_PROGRESS,
@@ -43,8 +43,10 @@ export default function App() {
   const [purchaseFiles, setPurchaseFiles] = useState<Partial<Record<SupplierId, SupplierPurchaseFileState>>>({});
   const [settings, setSettings] = useState<ExtensionSettings>(DEFAULT_SETTINGS);
   const [results, setResults] = useState<SupplierSearchResult[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [progress, setProgress] = useState(DEFAULT_PROGRESS);
   const [message, setMessage] = useState("");
+  const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
 
   const isRunning = progress.status === "running";
   const isLoginRequired = progress.status === "login_required";
@@ -76,6 +78,11 @@ export default function App() {
   const statusCountLabel = mode === "purchase_upload" ? "Добавлено" : "Найдено строк";
   const statusCountValue = mode === "purchase_upload" ? String(progress.found) : String(results.length);
   const statusText = progress.message || statusLabels[progress.status];
+  const issueLogs = useMemo(
+    () => logs.filter((log) => log.level === "error" || log.level === "warn").slice(-80).reverse(),
+    [logs]
+  );
+  const hasIssueDetails = progress.errors > 0 || issueLogs.length > 0;
 
   useEffect(() => {
     void loadExtensionState().then((state) => {
@@ -87,6 +94,7 @@ export default function App() {
       if (event.type === "STATE_CHANGED") {
         setProgress(event.payload.progress);
         setResults(event.payload.results);
+        setLogs(event.payload.logs);
       }
     };
 
@@ -97,6 +105,7 @@ export default function App() {
   function applyState(state: ExtensionState) {
     setSettings(state.settings);
     setResults(state.results);
+    setLogs(state.logs);
     setProgress(state.progress);
   }
 
@@ -403,19 +412,111 @@ export default function App() {
         <Metric label="Статус" value={statusText} />
         <Metric label="Поставщики" value={statusSupplierValue} />
         <Metric label={statusCountLabel} value={statusCountValue} />
-        <Metric label="Ошибок" value={String(progress.errors)} />
+        <Metric
+          label="Ошибок"
+          value={String(progress.errors)}
+          active={errorDetailsOpen}
+          disabled={!hasIssueDetails}
+          title={hasIssueDetails ? "Показать детали ошибок" : "Ошибок нет"}
+          onClick={() => setErrorDetailsOpen((open) => !open)}
+        />
       </section>
+
+      {errorDetailsOpen && (
+        <ErrorDetailsPanel logs={issueLogs} onClose={() => setErrorDetailsOpen(false)} />
+      )}
     </main>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="metric">
+function Metric({
+  label,
+  value,
+  active = false,
+  disabled = false,
+  title,
+  onClick
+}: {
+  label: string;
+  value: string;
+  active?: boolean;
+  disabled?: boolean;
+  title?: string;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
       <span>{label}</span>
       <strong title={value}>{value}</strong>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        className={`metric metric-button${active ? " metric-button-active" : ""}`}
+        type="button"
+        title={title ?? value}
+        onClick={onClick}
+        disabled={disabled}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className="metric">{content}</div>;
+}
+
+function ErrorDetailsPanel({ logs, onClose }: { logs: LogEntry[]; onClose: () => void }) {
+  return (
+    <section className="error-details" aria-live="polite">
+      <div className="error-details-header">
+        <div>
+          <span className="section-title">Детали ошибок</span>
+          <p>{logs.length ? `Показано записей: ${logs.length}` : "Подробных записей пока нет."}</p>
+        </div>
+        <button className="icon-button" type="button" onClick={onClose} title="Скрыть детали">
+          <X size={16} />
+        </button>
+      </div>
+
+      {logs.length ? (
+        <div className="error-log-list">
+          {logs.map((log) => (
+            <article key={log.id} className={`error-log-item log-${log.level}`}>
+              <div className="error-log-icon" aria-hidden="true">
+                <AlertTriangle size={15} />
+              </div>
+              <div className="error-log-body">
+                <div className="error-log-meta">
+                  <span>{formatLogTime(log.at)}</span>
+                  {log.supplierId && <span>{SUPPLIERS[log.supplierId].name}</span>}
+                  {log.query && <span title={log.query}>{log.query}</span>}
+                </div>
+                <p>{log.message}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-error-state">Ошибок в журнале нет.</div>
+      )}
+    </section>
+  );
+}
+
+function formatLogTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
 }
 
 function groupResultsBySupplier(results: SupplierSearchResult[]): Array<{
