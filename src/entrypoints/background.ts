@@ -31,7 +31,7 @@ import { sleep } from "../lib/utils/sleep";
 
 const MAX_LOGS = 300;
 const MIN_COLLECTION_PAGES = 25;
-const VISIBLE_TAB_SUPPLIERS = new Set<SupplierId>(["smartpro", "metro"]);
+const VISIBLE_TAB_SUPPLIERS = new Set<SupplierId>(["gfc", "smartpro", "metro"]);
 
 interface ActivePurchaseTask {
   supplierId: SupplierId;
