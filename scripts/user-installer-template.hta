@@ -225,7 +225,7 @@
       }
 
       getShell().Run("\"" + chromeExe + "\" \"" + chromePage + "\"", 1, false);
-      setStatus("Chrome открыт. Включите режим разработчика, нажмите Load unpacked и вставьте путь к папке расширения.", false);
+      setStatus("Chrome открыт. Перейдите в управление расширениями, включите режим разработчика, нажмите Load unpacked и вставьте путь к папке расширения.", false);
     }
 
     function checkExtensionPath() {
@@ -251,9 +251,10 @@
 
     <div class="panel">
       <p class="step"><strong>1.</strong> Нажмите <strong>Открыть Chrome</strong>.</p>
-      <p class="step"><strong>2.</strong> Включите <strong>Developer mode / Режим разработчика</strong>.</p>
-      <p class="step"><strong>3.</strong> Нажмите <strong>Load unpacked / Загрузить распакованное</strong>.</p>
-      <p class="step"><strong>4.</strong> Вставьте путь к папке расширения из поля ниже и нажмите выбор папки.</p>
+      <p class="step"><strong>2.</strong> Откройте <strong>Extensions / Управление расширениями</strong>.</p>
+      <p class="step"><strong>3.</strong> Включите <strong>Developer mode / Режим разработчика</strong>.</p>
+      <p class="step"><strong>4.</strong> Нажмите <strong>Load unpacked / Загрузить распакованное</strong>.</p>
+      <p class="step"><strong>5.</strong> Вставьте путь к папке расширения из поля ниже и нажмите выбор папки.</p>
 
       <div class="label">Папка расширения для Load unpacked</div>
       <input id="extensionPath" class="path" type="text" readonly>
