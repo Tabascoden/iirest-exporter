@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="x-ua-compatible" content="IE=11">
-  <title>PriceParse Install Helper</title>
+  <title>iiRest Exporter Install Helper</title>
   <hta:application
-    id="PriceParseInstallHelper"
-    applicationname="PriceParse Install Helper"
+    id="iiRestExporterInstallHelper"
+    applicationname="iiRest Exporter Install Helper"
     border="thin"
     caption="yes"
     maximizebutton="no"
@@ -132,7 +132,7 @@
     }
   </style>
   <script language="javascript">
-    var extensionVersion = "__PRICEPARSE_VERSION__";
+    var extensionVersion = "__IIREST_EXPORTER_VERSION__";
     var chromePage = "chrome://extensions";
 
     function getShell() {
@@ -158,7 +158,7 @@
     }
 
     function getExtensionPath() {
-      return getHelperFolder() + "_priceparse\\extension";
+      return getHelperFolder() + "_iirest-exporter\\extension";
     }
 
     function setStatus(message, isError) {
@@ -233,7 +233,7 @@
       var files = getFileSystem();
       var manifestPath = getExtensionPath() + "\\manifest.json";
       if (!files.FileExists(manifestPath)) {
-        setStatus("Файлы расширения не найдены. Не переносите этот файл отдельно от папки PriceParse.", true);
+        setStatus("Файлы расширения не найдены. Не переносите этот файл отдельно от папки iiRest Exporter.", true);
       }
     }
 
@@ -249,7 +249,7 @@
 <body onload="init()">
   <div class="shell">
     <div class="badge">Chrome extension</div>
-    <h1>Установка PriceParse <span id="version"></span></h1>
+    <h1>Установка iiRest Exporter <span id="version"></span></h1>
     <p class="lead">Расширение уже собрано в этой папке. Это окно только показывает шаги и копирует правильные адреса.</p>
 
     <div class="panel">

@@ -5,12 +5,12 @@ Set-Location $projectRoot
 
 $packageJson = Get-Content -LiteralPath (Join-Path $projectRoot "package.json") -Raw | ConvertFrom-Json
 $version = $packageJson.version
-$releaseName = "PriceParse-$version"
+$releaseName = "iiRest Exporter-$version"
 
 $wxtOutput = Join-Path $projectRoot ".output\chrome-mv3"
 $releaseRoot = Join-Path $projectRoot "FOR_USER"
 $packageRoot = Join-Path $releaseRoot $releaseName
-$workRoot = Join-Path $packageRoot "_priceparse"
+$workRoot = Join-Path $packageRoot "_iirest-exporter"
 $extensionRoot = Join-Path $workRoot "extension"
 $templatePath = Join-Path $PSScriptRoot "user-installer-template.hta"
 
@@ -34,17 +34,17 @@ New-Item -ItemType Directory -Path $extensionRoot -Force | Out-Null
 Copy-Item -Path (Join-Path $wxtOutput "*") -Destination $extensionRoot -Recurse -Force
 
 $installerTemplate = Get-Content -LiteralPath $templatePath -Raw -Encoding UTF8
-$installer = $installerTemplate.Replace("__PRICEPARSE_VERSION__", $version)
-Set-Content -LiteralPath (Join-Path $packageRoot "Install PriceParse.hta") -Value $installer -Encoding UTF8
+$installer = $installerTemplate.Replace("__IIREST_EXPORTER_VERSION__", $version)
+Set-Content -LiteralPath (Join-Path $packageRoot "Install iiRest Exporter.hta") -Value $installer -Encoding UTF8
 
 $workItem = Get-Item -LiteralPath $workRoot -Force
 $workItem.Attributes = $workItem.Attributes -bor [System.IO.FileAttributes]::Hidden
 
-Get-ChildItem -LiteralPath $releaseRoot -Filter "PriceParse-*.zip" -File -ErrorAction SilentlyContinue |
+Get-ChildItem -LiteralPath $releaseRoot -Filter "iiRest Exporter-*.zip" -File -ErrorAction SilentlyContinue |
   Remove-Item -Force
 
 Write-Host ""
 Write-Host "User folder: $packageRoot"
 Write-Host ""
-Write-Host "Visible root file: Install PriceParse.hta"
+Write-Host "Visible root file: Install iiRest Exporter.hta"
 Write-Host "Extension path:    $extensionRoot"
