@@ -221,7 +221,7 @@
     function openChromeExtensions() {
       var chromeExe = findChromeExe();
       if (!chromeExe) {
-        copyText("chromePage", "Адрес страницы Chrome скопирован. Откройте Chrome вручную и вставьте его в адресную строку.");
+        setStatus("Chrome не найден автоматически. Откройте Chrome вручную и введите chrome://extensions в адресную строку.", true);
         return;
       }
 
@@ -238,9 +238,8 @@
     }
 
     function init() {
-      window.resizeTo(670, 585);
+      window.resizeTo(670, 540);
       document.getElementById("version").innerHTML = extensionVersion;
-      document.getElementById("chromePage").value = chromePage;
       document.getElementById("extensionPath").value = getExtensionPath();
       checkExtensionPath();
     }
@@ -253,13 +252,10 @@
     <p class="lead">Расширение уже собрано в этой папке. Это окно только показывает шаги и копирует правильные адреса.</p>
 
     <div class="panel">
-      <p class="step"><strong>1.</strong> Откройте страницу расширений Chrome.</p>
+      <p class="step"><strong>1.</strong> Нажмите <strong>Открыть Chrome</strong>.</p>
       <p class="step"><strong>2.</strong> Включите <strong>Developer mode / Режим разработчика</strong>.</p>
       <p class="step"><strong>3.</strong> Нажмите <strong>Load unpacked / Загрузить распакованное</strong>.</p>
       <p class="step"><strong>4.</strong> Вставьте путь к папке расширения из поля ниже и нажмите выбор папки.</p>
-
-      <div class="label">Страница Chrome</div>
-      <input id="chromePage" class="path" type="text" readonly>
 
       <div class="label">Папка расширения для Load unpacked</div>
       <input id="extensionPath" class="path" type="text" readonly>
@@ -268,7 +264,6 @@
     <div class="actions">
       <button onclick="openChromeExtensions()">Открыть Chrome</button>
       <button class="secondary" onclick="copyText('extensionPath', 'Путь к папке расширения скопирован.')">Скопировать путь</button>
-      <button class="secondary" onclick="copyText('chromePage', 'Адрес страницы Chrome скопирован.')">Скопировать адрес</button>
     </div>
 
     <div id="status" class="status"></div>
