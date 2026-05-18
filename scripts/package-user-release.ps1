@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $projectRoot
@@ -13,6 +13,8 @@ $packageRoot = Join-Path $releaseRoot $releaseName
 $workRoot = Join-Path $packageRoot "_priceparse"
 $extensionRoot = Join-Path $workRoot "extension"
 $zipPath = Join-Path $releaseRoot "$releaseName.zip"
+$easyReleaseRoot = Join-Path $projectRoot "FOR_USER"
+$easyZipPath = Join-Path $easyReleaseRoot "$releaseName.zip"
 
 Write-Host "Building extension..."
 npm run build
@@ -287,8 +289,12 @@ if (Test-Path -LiteralPath $zipPath) {
 
 Compress-Archive -Path (Join-Path $packageRoot "*") -DestinationPath $zipPath -Force
 
+New-Item -ItemType Directory -Path $easyReleaseRoot -Force | Out-Null
+Copy-Item -LiteralPath $zipPath -Destination $easyZipPath -Force
+
 Write-Host ""
 Write-Host "User release folder: $packageRoot"
 Write-Host "User release ZIP:    $zipPath"
+Write-Host "Easy user ZIP:       $easyZipPath"
 Write-Host ""
 Write-Host "ZIP root contains Install PriceParse.hta and the _priceparse working folder."

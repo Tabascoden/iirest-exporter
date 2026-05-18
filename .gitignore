@@ -3,5 +3,6 @@ node_modules/
 .wxt/
 .playwright-cli/
 output/
+FOR_USER/
 dist/
 *.log
