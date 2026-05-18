@@ -1478,6 +1478,8 @@ function createDomError(config: DomSupplierConfig, message: string): SupplierDom
     adapter: config.name,
     url: location.href,
     title: document.title,
+    visibilityState: document.visibilityState,
+    hasFocus: document.hasFocus(),
     searchInputFound: Boolean(queryFirst(config.selectors.searchInput)),
     productRowsFound: collectProductElements(config).length,
     message

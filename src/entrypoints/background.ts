@@ -3,6 +3,7 @@ import type {
   ContentRequest,
   ContentResponse,
   DomDiagnostic,
+  PageDiagnostic,
   RuntimeEvent,
   RuntimeRequest,
   RuntimeResponse,
@@ -30,6 +31,7 @@ import { sleep } from "../lib/utils/sleep";
 
 const MAX_LOGS = 300;
 const MIN_COLLECTION_PAGES = 25;
+const VISIBLE_TAB_SUPPLIERS = new Set<SupplierId>(["smartpro", "metro"]);
 
 interface ActivePurchaseTask {
   supplierId: SupplierId;
@@ -58,6 +60,13 @@ interface ActiveRun {
   processing: boolean;
   lastRunAt: string;
   currentTabId?: number;
+}
+
+interface ActiveTabSnapshot {
+  previousTabId: number;
+  previousWindowId: number;
+  supplierTabId: number;
+  supplierWindowId: number;
 }
 
 let activeRun: ActiveRun | null = null;
@@ -346,11 +355,23 @@ async function processRun(run: ActiveRun): Promise<void> {
       appendLog(run, `${supplier.name}: поиск "${query}"`, "info", supplierId, query);
       await persistRun(run);
 
+      let activeTabSnapshot: ActiveTabSnapshot | null = null;
       try {
         const tab = await findOrOpenSupplierTab(supplier);
         run.currentTabId = tab.id;
+        activeTabSnapshot = await activateSupplierTabForAutomation(tab.id, supplier);
         await prepareSupplierTabForQuery(tab.id, supplier, query);
         await ensureContentReady(tab.id);
+        if (!(await waitForSupplierPageVisible(tab.id, supplier))) {
+          appendLog(
+            run,
+            `${supplier.name}: вкладка осталась скрытой, сайт может не загрузить выдачу без активной вкладки.`,
+            "warn",
+            supplierId,
+            query
+          );
+          await persistRun(run);
+        }
 
         const loginResponse = await sendTabMessage<ContentResponse<{ loggedIn: boolean; reason?: string }>>(
           tab.id,
@@ -425,6 +446,10 @@ async function processRun(run: ActiveRun): Promise<void> {
           query,
           error instanceof Error ? error.message : "Неизвестная ошибка поставщика"
         );
+      } finally {
+        if (!run.paused && !run.stopped) {
+          await restoreActiveTab(activeTabSnapshot);
+        }
       }
 
       run.completed += 1;
@@ -482,11 +507,23 @@ async function processPurchaseUploadRun(run: ActiveRun): Promise<void> {
       appendLog(run, `${supplier.name}: добавление "${item.name}" x ${item.quantity}`, "info", supplierId, item.name);
       await persistRun(run);
 
+      let activeTabSnapshot: ActiveTabSnapshot | null = null;
       try {
         const tab = await findOrOpenSupplierTab(supplier);
         run.currentTabId = tab.id;
+        activeTabSnapshot = await activateSupplierTabForAutomation(tab.id, supplier);
         await prepareSupplierTabForQuery(tab.id, supplier, item.name);
         await ensureContentReady(tab.id);
+        if (!(await waitForSupplierPageVisible(tab.id, supplier))) {
+          appendLog(
+            run,
+            `${supplier.name}: вкладка осталась скрытой, сайт может не загрузить выдачу без активной вкладки.`,
+            "warn",
+            supplierId,
+            item.name
+          );
+          await persistRun(run);
+        }
 
         const loginResponse = await sendTabMessage<ContentResponse<{ loggedIn: boolean; reason?: string }>>(
           tab.id,
@@ -570,6 +607,10 @@ async function processPurchaseUploadRun(run: ActiveRun): Promise<void> {
           item,
           error instanceof Error ? error.message : "Неизвестная ошибка поставщика"
         );
+      } finally {
+        if (!run.paused && !run.stopped) {
+          await restoreActiveTab(activeTabSnapshot);
+        }
       }
 
       run.completed += 1;
@@ -665,6 +706,8 @@ function recordSearchError(
         `${supplier.name}: DOM diagnostic`,
         `url=${diagnostic.url}`,
         `title=${diagnostic.title}`,
+        `visibility=${diagnostic.visibilityState ?? "unknown"}`,
+        `focus=${diagnostic.hasFocus ?? "unknown"}`,
         `searchInput=${diagnostic.searchInputFound}`,
         `productRows=${diagnostic.productRowsFound}`,
         `adapter=${diagnostic.adapter}`
@@ -694,6 +737,8 @@ function recordPurchaseError(
         `${supplier.name}: DOM diagnostic`,
         `url=${diagnostic.url}`,
         `title=${diagnostic.title}`,
+        `visibility=${diagnostic.visibilityState ?? "unknown"}`,
+        `focus=${diagnostic.hasFocus ?? "unknown"}`,
         `searchInput=${diagnostic.searchInputFound}`,
         `productRows=${diagnostic.productRowsFound}`,
         `adapter=${diagnostic.adapter}`
@@ -836,8 +881,81 @@ async function ensureContentReady(tabId: number): Promise<void> {
   }
 }
 
+async function activateSupplierTabForAutomation(
+  tabId: number,
+  supplier: SupplierInfo
+): Promise<ActiveTabSnapshot | null> {
+  if (!VISIBLE_TAB_SUPPLIERS.has(supplier.id)) {
+    return null;
+  }
+
+  const targetTab = await tabsGet(tabId);
+  const previousTab = await getLastFocusedActiveTab().catch(() => null);
+  const snapshot =
+    previousTab && previousTab.id !== tabId
+      ? {
+          previousTabId: previousTab.id,
+          previousWindowId: previousTab.windowId,
+          supplierTabId: tabId,
+          supplierWindowId: targetTab.windowId
+        }
+      : null;
+
+  await activateTab(tabId);
+  return snapshot;
+}
+
+async function waitForSupplierPageVisible(tabId: number, supplier: SupplierInfo): Promise<boolean> {
+  if (!VISIBLE_TAB_SUPPLIERS.has(supplier.id)) {
+    return true;
+  }
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    try {
+      const response = await sendTabMessage<ContentResponse<PageDiagnostic>>(tabId, { type: "SUPPLIER_PING" });
+      if (response.ok && response.data.visibilityState === "visible") {
+        return true;
+      }
+    } catch {
+      // The next retry can recover after navigation or content-script reinjection.
+    }
+
+    await activateTab(tabId);
+    await sleep(250);
+  }
+
+  return false;
+}
+
 async function activateTab(tabId: number): Promise<void> {
-  await tabsUpdate(tabId, { active: true }).catch(() => undefined);
+  const tab = await tabsUpdate(tabId, { active: true }).catch(() => undefined);
+  const windowId = tab?.windowId ?? (await tabsGet(tabId).catch(() => undefined))?.windowId;
+  if (windowId != null) {
+    await windowsUpdate(windowId, { focused: true }).catch(() => undefined);
+  }
+}
+
+async function restoreActiveTab(snapshot: ActiveTabSnapshot | null): Promise<void> {
+  if (!snapshot) {
+    return;
+  }
+
+  const lastFocusedTab = await getLastFocusedActiveTab().catch(() => null);
+  if (lastFocusedTab?.id !== snapshot.supplierTabId || lastFocusedTab.windowId !== snapshot.supplierWindowId) {
+    return;
+  }
+
+  await tabsUpdate(snapshot.previousTabId, { active: true }).catch(() => undefined);
+  await windowsUpdate(snapshot.previousWindowId, { focused: true }).catch(() => undefined);
+}
+
+async function getLastFocusedActiveTab(): Promise<chrome.tabs.Tab & { id: number; windowId: number }> {
+  const [tab] = await tabsQuery({ active: true, lastFocusedWindow: true });
+  if (tab?.id == null) {
+    throw new Error("Chrome did not return the active tab.");
+  }
+
+  return tab as chrome.tabs.Tab & { id: number; windowId: number };
 }
 
 async function abortActiveContent(run: ActiveRun): Promise<void> {
@@ -935,6 +1053,23 @@ function tabsUpdate(tabId: number, updateProperties: chrome.tabs.UpdatePropertie
         return;
       }
       resolve(tab);
+    });
+  });
+}
+
+function windowsUpdate(windowId: number, updateInfo: chrome.windows.UpdateInfo): Promise<chrome.windows.Window> {
+  return new Promise((resolve, reject) => {
+    chrome.windows.update(windowId, updateInfo, (window) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      if (!window) {
+        reject(new Error("Chrome did not return the updated window."));
+        return;
+      }
+      resolve(window);
     });
   });
 }

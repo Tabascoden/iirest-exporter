@@ -74,9 +74,18 @@ export interface DomDiagnostic {
   adapter: string;
   url: string;
   title: string;
+  visibilityState?: string;
+  hasFocus?: boolean;
   searchInputFound: boolean;
   productRowsFound: number;
   message: string;
+}
+
+export interface PageDiagnostic {
+  url: string;
+  title: string;
+  visibilityState: string;
+  hasFocus: boolean;
 }
 
 export type ContentRequest =

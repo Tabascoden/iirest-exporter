@@ -1,5 +1,5 @@
 import { defineContentScript } from "wxt/utils/define-content-script";
-import type { ContentRequest, ContentResponse } from "../lib/messages";
+import type { ContentRequest, ContentResponse, PageDiagnostic } from "../lib/messages";
 import { getSupplierAdapter } from "../lib/suppliers/registry";
 import { SupplierDomError } from "../lib/suppliers/dom-search";
 import type { SupplierId } from "../lib/suppliers/types";
@@ -41,10 +41,7 @@ async function handleContentRequest(request: ContentRequest): Promise<ContentRes
     case "SUPPLIER_PING":
       return {
         ok: true,
-        data: {
-          url: location.href,
-          title: document.title
-        }
+        data: getPageDiagnostic()
       };
 
     case "SUPPLIER_DETECT_LOGIN": {
@@ -98,6 +95,15 @@ async function handleContentRequest(request: ContentRequest): Promise<ContentRes
       return { ok: true, data: true };
     }
   }
+}
+
+function getPageDiagnostic(): PageDiagnostic {
+  return {
+    url: location.href,
+    title: document.title,
+    visibilityState: document.visibilityState,
+    hasFocus: document.hasFocus()
+  };
 }
 
 function getAdapter(supplierId: SupplierId) {
