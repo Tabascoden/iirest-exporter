@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
+    "release:user": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-user-release.ps1",
     "zip": "wxt zip",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
