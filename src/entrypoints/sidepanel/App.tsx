@@ -1,7 +1,13 @@
-import { AlertTriangle, Download, FileUp, Play, Square, Trash2, X } from "lucide-react";
+import { AlertTriangle, Download, FileUp, LogIn, Play, Square, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import iirestLogo from "../../assets/iirest-logo.svg";
 import { buildSupplierCsv, buildSupplierCsvFilename } from "../../lib/export/csv";
+import {
+  IirestImportError,
+  importPricesToIirest,
+  normalizeIirestBaseUrl,
+  type IirestImportMode
+} from "../../lib/iirest/import";
 import type { LogEntry, RuntimeEvent, RuntimeRequest, RuntimeResponse, RunStatus } from "../../lib/messages";
 import { parsePurchaseFile } from "../../lib/purchase/file";
 import {
@@ -47,6 +53,9 @@ export default function App() {
   const [progress, setProgress] = useState(DEFAULT_PROGRESS);
   const [message, setMessage] = useState("");
   const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [iirestLoginRequired, setIirestLoginRequired] = useState(false);
 
   const isRunning = progress.status === "running";
   const isLoginRequired = progress.status === "login_required";
@@ -116,6 +125,7 @@ export default function App() {
   }
 
   async function startSearch() {
+    setIirestLoginRequired(false);
     const queries = normalizeInputItems(rawInput);
     if (queries.length === 0) {
       setMessage("Введите хотя бы один товар.");
@@ -145,6 +155,7 @@ export default function App() {
       return;
     }
 
+    setIirestLoginRequired(false);
     setMessage("");
 
     try {
@@ -171,6 +182,7 @@ export default function App() {
   }
 
   async function startPurchaseUpload() {
+    setIirestLoginRequired(false);
     if (purchaseSupplierFiles.length === 0) {
       setMessage("Загрузите файл закупки хотя бы для одного поставщика.");
       return;
@@ -215,6 +227,7 @@ export default function App() {
   }
 
   async function exportCsv() {
+    setIirestLoginRequired(false);
     if (results.length === 0) {
       setMessage("Нет результатов для экспорта.");
       return;
@@ -249,8 +262,44 @@ export default function App() {
     }
   }
 
+  async function writeResultsToIirest(mode: IirestImportMode) {
+    if (results.length === 0) {
+      setMessage("Нет результатов для записи.");
+      return;
+    }
+
+    setIsImporting(true);
+    setMessage("");
+    setIirestLoginRequired(false);
+    try {
+      const response = await importPricesToIirest(settings.iirestBaseUrl, mode, results);
+      const supplierNames = response.suppliers.map((supplier) => supplier.supplier_name).join(", ");
+      const skippedText = response.skipped > 0 ? ` Пропущено: ${response.skipped}.` : "";
+      setMessage(`Записано в iiRest: ${response.imported}. Поставщики: ${supplierNames || "—"}.${skippedText}`);
+      setImportDialogOpen(false);
+    } catch (error) {
+      if (error instanceof IirestImportError && error.status === 401) {
+        setIirestLoginRequired(true);
+        setMessage("Нужно войти в iiRest. Откройте iiRest, авторизуйтесь и повторите запись.");
+      } else {
+        setMessage(error instanceof Error ? error.message : "Не удалось записать результаты в iiRest.");
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  function openIirestLogin() {
+    try {
+      chrome.tabs.create({ url: normalizeIirestBaseUrl(settings.iirestBaseUrl) });
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Не удалось открыть iiRest.");
+    }
+  }
+
   function applyResponse(response: RuntimeResponse<ExtensionState>) {
     if (!response.ok) {
+      setIirestLoginRequired(false);
       setMessage(response.error);
       return;
     }
@@ -303,7 +352,17 @@ export default function App() {
         </select>
       </section>
 
-      {message && <div className="notice">{message}</div>}
+      {message && (
+        <div className={`notice${iirestLoginRequired ? " notice-actionable" : ""}`}>
+          <span>{message}</span>
+          {iirestLoginRequired && (
+            <button className="notice-action" type="button" onClick={openIirestLogin}>
+              <LogIn size={16} />
+              Открыть iiRest
+            </button>
+          )}
+        </div>
+      )}
 
       {mode === "price_export" && (
       <section className="panel-section">
@@ -382,6 +441,22 @@ export default function App() {
         )}
       </section>
 
+      {mode === "price_export" && (
+        <section className="panel-section">
+          <label className="field-label" htmlFor="iirest-url">
+            iiRest URL
+          </label>
+          <input
+            id="iirest-url"
+            className="url-input"
+            type="url"
+            value={settings.iirestBaseUrl}
+            onChange={(event) => void updateSettings({ iirestBaseUrl: event.target.value })}
+            disabled={isRunning || isImporting}
+          />
+        </section>
+      )}
+
       <section className="actions">
         <button
           className="primary-button"
@@ -406,7 +481,53 @@ export default function App() {
           Выгрузить
         </button>
         )}
+        {mode === "price_export" && (
+        <button
+          type="button"
+          onClick={() => setImportDialogOpen(true)}
+          disabled={results.length === 0 || isRunning || isImporting}
+        >
+          <FileUp size={16} />
+          Записать
+        </button>
+        )}
       </section>
+
+      {mode === "price_export" && importDialogOpen && (
+        <section className="import-choice" aria-live="polite">
+          <div className="import-choice-header">
+            <div>
+              <span className="section-title">Записать в iiRest</span>
+              <p>Строк: {results.length}</p>
+            </div>
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setImportDialogOpen(false)}
+              title="Скрыть"
+              disabled={isImporting}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="import-choice-actions">
+            <button type="button" onClick={() => void writeResultsToIirest("append")} disabled={isImporting}>
+              <FileUp size={16} />
+              Дополнить
+            </button>
+            <button
+              className="danger-button"
+              type="button"
+              onClick={() => void writeResultsToIirest("replace")}
+              disabled={isImporting}
+            >
+              <Trash2 size={16} />
+              Перезаписать
+            </button>
+          </div>
+          <p className="import-warning">Перезаписать заменит прайс поставщика текущей выгрузкой.</p>
+        </section>
+      )}
 
       <section className="progress-grid">
         <Metric label="Статус" value={statusText} />
