@@ -80,6 +80,9 @@ export const metroAdapter = createDomSupplierAdapter({
   },
   cartSelectors: {
     addButton: [
+      '[data-qa-button-to-cart]',
+      'button[data-gtm="add-to-cart-btn"]',
+      'button[class*="to-cart"]',
       'button[class*="cart"]',
       '[class*="cart"] button',
       '[data-testid*="cart"] button',

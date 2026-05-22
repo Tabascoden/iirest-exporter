@@ -38,6 +38,11 @@ export async function importPricesToIirest(
   const response = await fetch(endpoint, {
     method: "POST",
     credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Requested-With": "XMLHttpRequest"
+    },
     body: JSON.stringify({ mode, results })
   });
   const payload = await readJsonResponse(response);
@@ -68,7 +73,7 @@ export function normalizeIirestBaseUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/u, "");
   const withScheme = /^https?:\/\//iu.test(trimmed) ? trimmed : `https://${trimmed}`;
   const url = new URL(withScheme);
-  return url.toString().replace(/\/+$/u, "");
+  return url.origin;
 }
 
 async function readJsonResponse(response: Response): Promise<unknown> {

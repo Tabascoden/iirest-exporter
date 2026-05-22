@@ -17,6 +17,8 @@ export default defineConfig({
       "https://metro-cc.ru/*",
       "https://*.metro-cc.ru/*",
       "https://app.iirest.ru/*",
+      "https://iirest.ru/*",
+      "https://*.iirest.ru/*",
       "http://localhost/*",
       "http://127.0.0.1/*"
     ],
