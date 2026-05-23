@@ -1,4 +1,4 @@
-export type SupplierId = "gfc" | "smartpro" | "metro";
+export type SupplierId = "gfc" | "smartpro" | "metro" | "sweetlife";
 
 export interface SupplierSearchResult {
   supplierId: SupplierId;
@@ -96,6 +96,14 @@ export const SUPPLIERS: Record<SupplierId, SupplierInfo> = {
     hostPatterns: ["online.metro-cc.ru"],
     searchPathPrefix: "/search",
     searchUrl: (query) => `https://online.metro-cc.ru/search?q=${encodeURIComponent(query)}`
+  },
+  sweetlife: {
+    id: "sweetlife",
+    name: "Sweet Life",
+    startUrl: "https://swlife.ru/",
+    loginUrl: "https://swlife.ru/login",
+    hostPatterns: ["swlife.ru"],
+    searchUrl: (query) => `https://swlife.ru/#search?query=${encodeURIComponent(query)}`
   }
 };
 

@@ -1,0 +1,297 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="x-ua-compatible" content="IE=11">
+  <title>iiRest Exporter Yandex Install Helper</title>
+  <hta:application
+    id="iiRestExporterYandexInstallHelper"
+    applicationname="iiRest Exporter Yandex Install Helper"
+    border="thin"
+    caption="yes"
+    maximizebutton="no"
+    minimizebutton="yes"
+    scroll="no"
+    singleinstance="yes"
+    sysmenu="yes"
+    windowstate="normal"
+  />
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #f6f2ea;
+      color: #19242c;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-size: 14px;
+    }
+
+    .shell {
+      padding: 28px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 5px 9px;
+      border: 1px solid #bdd0c6;
+      background: #e7f0ea;
+      color: #22563e;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 15px 0 8px;
+      color: #121d25;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.15;
+    }
+
+    .lead {
+      margin: 0 0 18px;
+      color: #4a5a64;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .panel {
+      margin: 16px 0;
+      padding: 18px;
+      border: 1px solid #d8d0c2;
+      background: #fffbf3;
+    }
+
+    .step {
+      margin: 0 0 12px;
+      line-height: 1.42;
+    }
+
+    .step strong {
+      color: #121d25;
+    }
+
+    .note {
+      margin-top: 14px;
+      color: #785f12;
+      line-height: 1.42;
+    }
+
+    .label {
+      margin: 14px 0 7px;
+      color: #51626d;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+    }
+
+    .path {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 10px 11px;
+      border: 1px solid #c5d1ca;
+      background: #ffffff;
+      color: #26323a;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+    }
+
+    .actions {
+      margin-top: 16px;
+    }
+
+    button {
+      min-width: 178px;
+      margin-right: 8px;
+      padding: 11px 14px;
+      border: 1px solid #2f6f55;
+      background: #2f6f55;
+      color: #ffffff;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: hand;
+    }
+
+    button.secondary {
+      border-color: #b7c5bd;
+      background: #ffffff;
+      color: #2f4d41;
+    }
+
+    .status {
+      min-height: 34px;
+      margin-top: 15px;
+      color: #2f6f55;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .status.error {
+      color: #b42318;
+    }
+  </style>
+  <script language="javascript">
+    var tunePage = "browser://tune";
+
+    function getShell() {
+      return new ActiveXObject("WScript.Shell");
+    }
+
+    function getFileSystem() {
+      return new ActiveXObject("Scripting.FileSystemObject");
+    }
+
+    function getHelperFolder() {
+      var path = document.location.pathname;
+      if (path.charAt(0) === "/") {
+        path = path.substring(1);
+      }
+      path = path.replace(/\//g, "\\");
+      try {
+        path = decodeURIComponent(path);
+      } catch (error) {
+        path = unescape(path);
+      }
+      return path.substring(0, path.lastIndexOf("\\") + 1);
+    }
+
+    function getExtensionPath() {
+      return getHelperFolder() + "_iirest-exporter-yandex\\extension";
+    }
+
+    function getCrxPath() {
+      return getHelperFolder() + "iiRest Exporter Yandex.crx";
+    }
+
+    function setStatus(message, isError) {
+      var status = document.getElementById("status");
+      status.className = isError ? "status error" : "status";
+      status.innerHTML = message;
+    }
+
+    function copyText(elementId, successText) {
+      var input = document.getElementById(elementId);
+      input.select();
+
+      try {
+        window.clipboardData.setData("Text", input.value);
+        setStatus(successText, false);
+        return true;
+      } catch (error) {
+        setStatus("Не удалось скопировать автоматически. Выделите поле и нажмите Ctrl+C.", true);
+        return false;
+      }
+    }
+
+    function readRegistry(path) {
+      try {
+        return getShell().RegRead(path);
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function normalizeExePath(path) {
+      if (!path) {
+        return "";
+      }
+      return String(path).replace(/^"|"$/g, "");
+    }
+
+    function findYandexBrowserExe() {
+      var shell = getShell();
+      var files = getFileSystem();
+      var candidates = [
+        readRegistry("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\browser.exe\\"),
+        readRegistry("HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\browser.exe\\"),
+        readRegistry("HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\App Paths\\browser.exe\\"),
+        shell.ExpandEnvironmentStrings("%ProgramFiles%") + "\\Yandex\\YandexBrowser\\Application\\browser.exe",
+        shell.ExpandEnvironmentStrings("%ProgramFiles(x86)%") + "\\Yandex\\YandexBrowser\\Application\\browser.exe",
+        shell.ExpandEnvironmentStrings("%LocalAppData%") + "\\Yandex\\YandexBrowser\\Application\\browser.exe"
+      ];
+
+      for (var i = 0; i < candidates.length; i++) {
+        var candidate = normalizeExePath(candidates[i]);
+        if (candidate && files.FileExists(candidate)) {
+          return candidate;
+        }
+      }
+
+      return "";
+    }
+
+    function openYandexTune() {
+      var browserExe = findYandexBrowserExe();
+      if (!browserExe) {
+        setStatus("Яндекс Браузер не найден автоматически. Откройте его вручную и введите browser://tune в адресную строку.", true);
+        return;
+      }
+
+      getShell().Run("\"" + browserExe + "\" \"" + tunePage + "\"", 1, false);
+      setStatus("Яндекс Браузер открыт. Перетащите файл CRX из папки установки в окно браузера.", false);
+    }
+
+    function openPackageFolder() {
+      getShell().Run("explorer.exe \"" + getHelperFolder() + "\"", 1, false);
+      setStatus("Папка установки открыта. Перетащите файл iiRest Exporter Yandex.crx в окно Яндекс Браузера.", false);
+    }
+
+    function checkExtensionPath() {
+      var files = getFileSystem();
+      if (!files.FileExists(getCrxPath())) {
+        setStatus("CRX-файл расширения не найден. Запустите сборку пользовательского пакета заново.", true);
+        return;
+      }
+
+      var manifestPath = getExtensionPath() + "\\manifest.json";
+      if (!files.FileExists(manifestPath)) {
+        setStatus("Файлы расширения не найдены. Не переносите этот файл отдельно от папки iiRest Exporter Yandex.", true);
+      }
+    }
+
+    function init() {
+      window.resizeTo(700, 585);
+      document.getElementById("crxPath").value = getCrxPath();
+      document.getElementById("extensionPath").value = getExtensionPath();
+      checkExtensionPath();
+    }
+  </script>
+</head>
+<body onload="init()">
+  <div class="shell">
+    <div class="badge">Yandex Browser extension</div>
+    <h1>Установка iiRest Exporter для Яндекс Браузера</h1>
+    <p class="lead">Расширение уже собрано в этой папке. Это окно открывает страницу расширений и копирует правильный путь.</p>
+
+    <div class="panel">
+      <p class="step"><strong>1.</strong> Нажмите <strong>Открыть Яндекс Браузер</strong>.</p>
+      <p class="step"><strong>2.</strong> Нажмите <strong>Открыть папку</strong>.</p>
+      <p class="step"><strong>3.</strong> Перетащите файл <strong>iiRest Exporter Yandex.crx</strong> в окно Яндекс Браузера на странице <strong>browser://tune</strong>.</p>
+      <p class="step"><strong>4.</strong> Подтвердите установку и включение расширения.</p>
+      <p class="step"><strong>5.</strong> После установки нажмите иконку iiRest Exporter. Интерфейс откроется в отдельной вкладке.</p>
+      <p class="note">Яндекс Браузер может отключать расширения из непроверенных источников после перезапуска. Если это случится, включите расширение снова на странице browser://tune. Для постоянного включения нужна публикация в Chrome Web Store или Opera Add-ons.</p>
+
+      <div class="label">CRX-файл для перетаскивания в Яндекс Браузер</div>
+      <input id="crxPath" class="path" type="text" readonly>
+
+      <div class="label">Папка расширения для отладки</div>
+      <input id="extensionPath" class="path" type="text" readonly>
+    </div>
+
+    <div class="actions">
+      <button onclick="openYandexTune()">Открыть Яндекс Браузер</button>
+      <button class="secondary" onclick="openPackageFolder()">Открыть папку</button>
+      <button class="secondary" onclick="copyText('crxPath', 'Путь к CRX-файлу скопирован.')">Скопировать путь CRX</button>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+</body>
+</html>

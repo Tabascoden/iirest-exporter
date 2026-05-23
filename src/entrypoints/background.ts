@@ -3,6 +3,7 @@ import type {
   ContentRequest,
   ContentResponse,
   DomDiagnostic,
+  IirestImportPayload,
   PageDiagnostic,
   RuntimeEvent,
   RuntimeRequest,
@@ -26,12 +27,14 @@ import {
   type SupplierInfo,
   type SupplierSearchResult
 } from "../lib/suppliers/types";
+import { normalizeIirestBaseUrl, type IirestImportResponse } from "../lib/iirest/import";
 import { createLogEntry } from "../lib/utils/logger";
 import { sleep } from "../lib/utils/sleep";
 
 const MAX_LOGS = 300;
 const MIN_COLLECTION_PAGES = 25;
-const VISIBLE_TAB_SUPPLIERS = new Set<SupplierId>(["gfc", "smartpro", "metro"]);
+const EXTENSION_PANEL_PAGE = "panel.html";
+const VISIBLE_TAB_SUPPLIERS = new Set<SupplierId>(["gfc", "smartpro", "metro", "sweetlife"]);
 
 interface ActivePurchaseTask {
   supplierId: SupplierId;
@@ -65,17 +68,12 @@ interface ActiveRun {
 let activeRun: ActiveRun | null = null;
 
 export default defineBackground(() => {
-  chrome.runtime.onInstalled.addListener(() => {
-    void chrome.sidePanel
-      .setPanelBehavior({ openPanelOnActionClick: true })
-      .catch(() => undefined);
-  });
-
   chrome.action.onClicked.addListener((tab) => {
     if (tab.windowId == null) {
       return;
     }
-    void chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
+
+    void openPanelTab(tab.windowId);
   });
 
   chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
@@ -96,6 +94,14 @@ export default defineBackground(() => {
   });
 });
 
+async function openPanelTab(windowId: number): Promise<void> {
+  await tabsCreate({
+    active: true,
+    url: chrome.runtime.getURL(EXTENSION_PANEL_PAGE),
+    windowId
+  });
+}
+
 function isRuntimeRequest(message: unknown): message is RuntimeRequest {
   if (!message || typeof message !== "object" || !("type" in message)) {
     return false;
@@ -104,6 +110,7 @@ function isRuntimeRequest(message: unknown): message is RuntimeRequest {
   return [
     "START_SEARCH",
     "START_PURCHASE_UPLOAD",
+    "IMPORT_PRICES_TO_IIREST",
     "STOP_SEARCH",
     "CONTINUE_SEARCH",
     "CLEAR_RESULTS",
@@ -151,12 +158,41 @@ async function handleRuntimeRequest(request: RuntimeRequest): Promise<RuntimeRes
     case "START_PURCHASE_UPLOAD":
       return startPurchaseUploadPayload(request.payload);
 
+    case "IMPORT_PRICES_TO_IIREST":
+      return importPricesToIirestPayload(request.payload);
+
     case "STOP_SEARCH":
       return stopSearch();
 
     case "CONTINUE_SEARCH":
       return continueSearch();
   }
+}
+
+async function importPricesToIirestPayload(
+  payload: IirestImportPayload
+): Promise<RuntimeResponse<IirestImportResponse>> {
+  if (payload.results.length === 0) {
+    return { ok: false, error: "Нет результатов для записи." };
+  }
+
+  const baseUrl = normalizeIirestBaseUrl(payload.baseUrl);
+  const tab = await findOrOpenIirestTab(baseUrl);
+  await ensureIirestContentReady(tab.id);
+
+  const response = await sendTabMessage<ContentResponse<IirestImportResponse>>(tab.id, {
+    type: "IIREST_IMPORT_PRICES",
+    payload: {
+      ...payload,
+      baseUrl
+    }
+  } satisfies ContentRequest);
+
+  if (!response.ok) {
+    return { ok: false, error: response.error, status: response.status };
+  }
+
+  return { ok: true, data: response.data };
 }
 
 async function startSearchPayload(payload: {
@@ -813,6 +849,25 @@ async function findOrOpenSupplierTab(supplier: SupplierInfo): Promise<chrome.tab
   return tab as chrome.tabs.Tab & { id: number };
 }
 
+async function findOrOpenIirestTab(baseUrl: string): Promise<chrome.tabs.Tab & { id: number }> {
+  const origin = new URL(baseUrl).origin;
+  const tabs = await tabsQuery({});
+  const existing = tabs.find((tab) => {
+    if (tab.id == null || !tab.url) {
+      return false;
+    }
+    return isUrlOnOrigin(tab.url, origin);
+  });
+
+  const tab = existing ?? (await tabsCreate({ url: baseUrl, active: false }));
+  if (tab.id == null) {
+    throw new Error("Не удалось открыть вкладку iiRest.");
+  }
+
+  await waitForTabComplete(tab.id);
+  return tab as chrome.tabs.Tab & { id: number };
+}
+
 async function prepareSupplierTabForQuery(tabId: number, supplier: SupplierInfo, query: string): Promise<void> {
   const targetUrl = supplier.searchUrl?.(query);
   if (!targetUrl) {
@@ -857,6 +912,18 @@ async function ensureContentReady(tabId: number): Promise<void> {
     await waitForTabComplete(tabId);
     await sleep(500);
     await sendTabMessage<ContentResponse>(tabId, { type: "SUPPLIER_PING" });
+  }
+}
+
+async function ensureIirestContentReady(tabId: number): Promise<void> {
+  try {
+    await sendTabMessage<ContentResponse>(tabId, { type: "IIREST_PING" });
+    return;
+  } catch {
+    await tabsReload(tabId);
+    await waitForTabComplete(tabId);
+    await sleep(500);
+    await sendTabMessage<ContentResponse>(tabId, { type: "IIREST_PING" });
   }
 }
 
@@ -913,6 +980,14 @@ function isUrlOnHost(url: string, host: string): boolean {
   try {
     const parsed = new URL(url);
     return parsed.hostname === host || parsed.hostname.endsWith(`.${host}`);
+  } catch {
+    return false;
+  }
+}
+
+function isUrlOnOrigin(url: string, origin: string): boolean {
+  try {
+    return new URL(url).origin === origin;
   } catch {
     return false;
   }

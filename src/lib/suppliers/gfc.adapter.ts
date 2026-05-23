@@ -61,10 +61,12 @@ export const gfcAdapter = createDomSupplierAdapter({
   },
   cartSelectors: {
     addButton: [
+      'button[id^="catalog-product-add-"]',
       '[data-pw*="cart"]',
       '[data-cy*="cart"]',
       'button[id*="cart"]',
       'button[class*="cart"]',
+      '[data-gtm*="add-to-cart"]',
       'button:has(svg)'
     ],
     quantityInput: [

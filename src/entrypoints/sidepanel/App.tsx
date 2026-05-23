@@ -3,8 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import iirestLogo from "../../assets/iirest-logo.svg";
 import { buildSupplierCsv, buildSupplierCsvFilename } from "../../lib/export/csv";
 import {
-  IirestImportError,
-  importPricesToIirest,
+  type IirestImportResponse,
   normalizeIirestBaseUrl,
   type IirestImportMode
 } from "../../lib/iirest/import";
@@ -272,18 +271,37 @@ export default function App() {
     setMessage("");
     setIirestLoginRequired(false);
     try {
-      const response = await importPricesToIirest(settings.iirestBaseUrl, mode, results);
-      const supplierNames = response.suppliers.map((supplier) => supplier.supplier_name).join(", ");
-      const skippedText = response.skipped > 0 ? ` Пропущено: ${response.skipped}.` : "";
-      setMessage(`Записано в iiRest: ${response.imported}. Поставщики: ${supplierNames || "—"}.${skippedText}`);
+      const response = await sendRuntimeMessage<IirestImportResponse>({
+        type: "IMPORT_PRICES_TO_IIREST",
+        payload: {
+          baseUrl: settings.iirestBaseUrl,
+          mode,
+          results
+        }
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          setIirestLoginRequired(true);
+        }
+        setMessage(
+          response.status === 401
+            ? "Нужно войти в iiRest. Откройте iiRest, авторизуйтесь и повторите запись."
+            : response.error
+        );
+        return;
+      }
+
+      if (!response.data) {
+        setMessage("iiRest вернул неожиданный ответ.");
+        return;
+      }
+
+      const supplierNames = response.data.suppliers.map((supplier) => supplier.supplier_name).join(", ");
+      const skippedText = response.data.skipped > 0 ? ` Пропущено: ${response.data.skipped}.` : "";
+      setMessage(`Записано в iiRest: ${response.data.imported}. Поставщики: ${supplierNames || "—"}.${skippedText}`);
       setImportDialogOpen(false);
     } catch (error) {
-      if (error instanceof IirestImportError && error.status === 401) {
-        setIirestLoginRequired(true);
-        setMessage("Нужно войти в iiRest. Откройте iiRest, авторизуйтесь и повторите запись.");
-      } else {
-        setMessage(error instanceof Error ? error.message : "Не удалось записать результаты в iiRest.");
-      }
+      setMessage(error instanceof Error ? error.message : "Не удалось записать результаты в iiRest.");
     } finally {
       setIsImporting(false);
     }

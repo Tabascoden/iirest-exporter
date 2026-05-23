@@ -1226,7 +1226,8 @@ async function setRequestedQuantity(
   signal?: AbortSignal
 ): Promise<boolean> {
   const normalizedQuantity = normalizeQuantityForInput(quantity);
-  const quantityIsDefault = normalizedQuantity === "1";
+  const targetQuantity = parseQuantityNumber(normalizedQuantity);
+  const quantityIsDefault = targetQuantity === 1;
   const roots = preferredRoot === document ? [document] : [preferredRoot, document];
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -1242,6 +1243,10 @@ async function setRequestedQuantity(
       return true;
     }
 
+    if (await setQuantityWithStepper(config, roots, targetQuantity, signal)) {
+      return true;
+    }
+
     if (quantityIsDefault && attempt >= 2) {
       return true;
     }
@@ -1250,6 +1255,37 @@ async function setRequestedQuantity(
   }
 
   return false;
+}
+
+async function setQuantityWithStepper(
+  config: DomSupplierConfig,
+  roots: ParentNode[],
+  targetQuantity: number | null,
+  signal?: AbortSignal
+): Promise<boolean> {
+  if (targetQuantity == null || targetQuantity <= 0 || !Number.isInteger(targetQuantity)) {
+    return false;
+  }
+
+  const currentQuantity = readVisibleQuantity(config, roots) ?? 1;
+  if (currentQuantity === targetQuantity) {
+    return true;
+  }
+
+  const direction = targetQuantity > currentQuantity ? "increment" : "decrement";
+  const stepButton = findQuantityStepButton(config, roots, direction);
+  if (!stepButton) {
+    return false;
+  }
+
+  const clicks = Math.min(Math.abs(targetQuantity - currentQuantity), 50);
+  for (let index = 0; index < clicks; index += 1) {
+    throwIfAborted(signal);
+    clickElement(stepButton);
+    await sleep(200, signal);
+  }
+
+  return true;
 }
 
 function findQuantityInput(config: DomSupplierConfig, roots: ParentNode[]): HTMLInputElement | null {
@@ -1283,6 +1319,8 @@ function hasQuantityControl(roots: ParentNode[]): boolean {
   const selectors = [
     "[class*='counter']",
     "[class*='quantity']",
+    "[class*='stepper']",
+    "[class*='amount']",
     "[data-testid*='quantity']",
     "[data-test*='quantity']",
     "[data-qa*='quantity']",
@@ -1302,6 +1340,145 @@ function hasQuantityControl(roots: ParentNode[]): boolean {
       return /(counter|quantity|qty|колич|кол-во|\+|-|\d+)/iu.test(descriptor);
     })
   );
+}
+
+function findQuantityStepButton(
+  config: DomSupplierConfig,
+  roots: ParentNode[],
+  direction: "increment" | "decrement"
+): HTMLElement | null {
+  const selectors =
+    direction === "increment"
+      ? [
+          'button[aria-label*="увелич"]',
+          'button[title*="увелич"]',
+          'button[aria-label*="плюс"]',
+          'button[title*="плюс"]',
+          'button[class*="plus"]',
+          'button[class*="increment"]',
+          'button[class*="increase"]',
+          '[role="button"][class*="plus"]',
+          '[role="button"][class*="increment"]',
+          "button",
+          '[role="button"]'
+        ]
+      : [
+          'button[aria-label*="уменьш"]',
+          'button[title*="уменьш"]',
+          'button[aria-label*="минус"]',
+          'button[title*="минус"]',
+          'button[class*="minus"]',
+          'button[class*="decrement"]',
+          'button[class*="decrease"]',
+          '[role="button"][class*="minus"]',
+          '[role="button"][class*="decrement"]',
+          "button",
+          '[role="button"]'
+        ];
+
+  const seen = new Set<HTMLElement>();
+  const candidates: Array<{ element: HTMLElement; index: number; score: number }> = [];
+
+  for (const root of roots) {
+    for (const element of queryAllUnique<HTMLElement>(selectors, root)) {
+      if (seen.has(element)) {
+        continue;
+      }
+      seen.add(element);
+
+      if (!isVisible(element) || isDisabled(element)) {
+        continue;
+      }
+
+      const score = scoreQuantityStepButton(config, element, direction, root !== document);
+      if (score > 0) {
+        candidates.push({ element, index: candidates.length, score });
+      }
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score || a.index - b.index);
+  return candidates[0]?.element ?? null;
+}
+
+function scoreQuantityStepButton(
+  config: DomSupplierConfig,
+  element: HTMLElement,
+  direction: "increment" | "decrement",
+  preferredRoot: boolean
+): number {
+  const descriptor = getElementDescriptor(element);
+  if (/(favorite|heart|избран|сравнен|compare|search|поиск|filter|sort)/iu.test(descriptor)) {
+    return 0;
+  }
+
+  let score = 0;
+  const exactText = getText(element);
+
+  if (direction === "increment") {
+    if (/^\+$/u.test(exactText)) {
+      score += 120;
+    }
+    if (/(plus|increment|increase|увелич|плюс|\+)/iu.test(descriptor)) {
+      score += 100;
+    }
+  } else {
+    if (/^[−-]$/u.test(exactText)) {
+      score += 120;
+    }
+    if (/(minus|decrement|decrease|уменьш|минус)/iu.test(descriptor)) {
+      score += 100;
+    }
+  }
+
+  if (/(counter|quantity|qty|amount|колич|кол-во)/iu.test(descriptor)) {
+    score += 40;
+  }
+
+  if (config.id === "gfc" && /catalog-product-(inc|dec|plus|minus|quantity)/iu.test(descriptor)) {
+    score += 60;
+  }
+
+  if (score > 0 && preferredRoot) {
+    score += 20;
+  }
+
+  return score;
+}
+
+function readVisibleQuantity(config: DomSupplierConfig, roots: ParentNode[]): number | null {
+  const input = findQuantityInput(config, roots);
+  if (input) {
+    return parseQuantityNumber(input.value);
+  }
+
+  const quantityTextElements = roots.flatMap((root) =>
+    queryAllUnique<HTMLElement>(
+      [
+        "[class*='counter']",
+        "[class*='quantity']",
+        "[class*='stepper']",
+        "[class*='amount']",
+        "[data-testid*='quantity']",
+        "[data-test*='quantity']",
+        "[data-qa*='quantity']"
+      ],
+      root
+    )
+  );
+
+  for (const element of quantityTextElements) {
+    if (!isVisible(element)) {
+      continue;
+    }
+    const match = getText(element).match(/^\s*(\d+)\s*$/u);
+    const parsed = match?.[1] ? Number(match[1]) : null;
+    if (parsed != null && Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 function getCartIndicatorText(): string {
@@ -1368,13 +1545,13 @@ function scoreCartButton(element: HTMLElement): number {
   if (/(в корз|корзин|добав|заказ|купить|cart|basket)/iu.test(getText(element))) {
     score += 120;
   }
-  if (/(cart|basket|add-to|order|корз)/iu.test(descriptor)) {
-    score += 80;
+  if (/(cart|basket|add-to|add_to|to-cart|button-to-cart|product-add|catalog-product-add|order|корз)/iu.test(descriptor)) {
+    score += 100;
   }
-  if (element.tagName === "BUTTON") {
+  if (score > 0 && element.tagName === "BUTTON") {
     score += 20;
   }
-  if (element.querySelector("svg")) {
+  if (score > 0 && element.querySelector("svg")) {
     score += 8;
   }
 
@@ -1427,6 +1604,11 @@ function getElementDescriptor(element: Element): string {
 function normalizeQuantityForInput(value: string): string {
   const match = value.match(/\d+(?:[.,]\d+)?/u);
   return match ? match[0].replace(",", ".") : value;
+}
+
+function parseQuantityNumber(value: string): number | null {
+  const parsed = Number(normalizeQuantityForInput(value));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function normalizeForMatch(value: string): string {

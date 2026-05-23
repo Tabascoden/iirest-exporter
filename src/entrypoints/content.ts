@@ -1,5 +1,6 @@
 import { defineContentScript } from "wxt/utils/define-content-script";
 import type { ContentRequest, ContentResponse, PageDiagnostic } from "../lib/messages";
+import { IirestImportError, importPricesToIirest, normalizeIirestBaseUrl } from "../lib/iirest/import";
 import { getSupplierAdapter } from "../lib/suppliers/registry";
 import { SupplierDomError } from "../lib/suppliers/dom-search";
 import type { SupplierId } from "../lib/suppliers/types";
@@ -13,7 +14,13 @@ export default defineContentScript({
     "https://smartpro.ru/*",
     "https://*.smartpro.ru/*",
     "https://metro-cc.ru/*",
-    "https://*.metro-cc.ru/*"
+    "https://*.metro-cc.ru/*",
+    "https://swlife.ru/*",
+    "https://*.swlife.ru/*",
+    "https://iirest.ru/*",
+    "https://*.iirest.ru/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
   ],
   runAt: "document_idle",
   main() {
@@ -33,16 +40,31 @@ export default defineContentScript({
 
 function isContentRequest(message: unknown): message is ContentRequest {
   const candidate = message as { type?: unknown } | null;
-  return typeof candidate?.type === "string" && candidate.type.startsWith("SUPPLIER_");
+  return (
+    typeof candidate?.type === "string" &&
+    (candidate.type.startsWith("SUPPLIER_") || candidate.type.startsWith("IIREST_"))
+  );
 }
 
 async function handleContentRequest(request: ContentRequest): Promise<ContentResponse> {
   switch (request.type) {
     case "SUPPLIER_PING":
+    case "IIREST_PING":
       return {
         ok: true,
         data: getPageDiagnostic()
       };
+
+    case "IIREST_IMPORT_PRICES": {
+      const baseUrl = normalizeIirestBaseUrl(request.payload.baseUrl);
+      const expectedOrigin = new URL(baseUrl).origin;
+      if (location.origin !== expectedOrigin) {
+        throw new Error(`Вкладка iiRest открыта на ${location.origin}, а в настройках указан ${expectedOrigin}.`);
+      }
+
+      const response = await importPricesToIirest(location.origin, request.payload.mode, request.payload.results);
+      return { ok: true, data: response };
+    }
 
     case "SUPPLIER_DETECT_LOGIN": {
       const adapter = getAdapter(request.supplierId);
@@ -75,7 +97,8 @@ async function handleContentRequest(request: ContentRequest): Promise<ContentRes
       try {
         const result = await adapter.addToCart(request.item, {
           signal: controller.signal,
-          delayMs: request.options.delayMs
+          delayMs: request.options.delayMs,
+          maxPages: request.options.maxPages
         });
         return { ok: true, data: result };
       } finally {
@@ -115,6 +138,14 @@ function getAdapter(supplierId: SupplierId) {
 }
 
 function serializeError(error: unknown): ContentResponse {
+  if (error instanceof IirestImportError) {
+    return {
+      ok: false,
+      error: error.message,
+      status: error.status
+    };
+  }
+
   if (error instanceof SupplierDomError) {
     return {
       ok: false,

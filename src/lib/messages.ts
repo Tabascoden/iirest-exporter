@@ -1,5 +1,6 @@
 import type { PurchaseUploadItem, SupplierId, SupplierSearchResult } from "./suppliers/types";
 import type { ExtensionSettings } from "./storage/results";
+import type { IirestImportMode } from "./iirest/import";
 
 export type RunStatus =
   | "idle"
@@ -53,9 +54,16 @@ export interface StartPurchaseUploadPayload {
   settings: ExtensionSettings;
 }
 
+export interface IirestImportPayload {
+  baseUrl: string;
+  mode: IirestImportMode;
+  results: SupplierSearchResult[];
+}
+
 export type RuntimeRequest =
   | { type: "START_SEARCH"; payload: StartSearchPayload }
   | { type: "START_PURCHASE_UPLOAD"; payload: StartPurchaseUploadPayload }
+  | { type: "IMPORT_PRICES_TO_IIREST"; payload: IirestImportPayload }
   | { type: "STOP_SEARCH" }
   | { type: "CONTINUE_SEARCH" }
   | { type: "CLEAR_RESULTS" }
@@ -64,7 +72,7 @@ export type RuntimeRequest =
 
 export type RuntimeResponse<T = unknown> =
   | { ok: true; data?: T }
-  | { ok: false; error: string };
+  | { ok: false; error: string; status?: number };
 
 export type RuntimeEvent =
   | { type: "STATE_CHANGED"; payload: { progress: RunProgress; results: SupplierSearchResult[]; logs: LogEntry[] } }
@@ -90,6 +98,8 @@ export interface PageDiagnostic {
 
 export type ContentRequest =
   | { type: "SUPPLIER_PING" }
+  | { type: "IIREST_PING" }
+  | { type: "IIREST_IMPORT_PRICES"; payload: IirestImportPayload }
   | { type: "SUPPLIER_DETECT_LOGIN"; supplierId: SupplierId }
   | {
       type: "SUPPLIER_SEARCH";
@@ -115,4 +125,4 @@ export type ContentRequest =
 
 export type ContentResponse<T = unknown> =
   | { ok: true; data: T }
-  | { ok: false; error: string; diagnostic?: DomDiagnostic };
+  | { ok: false; error: string; status?: number; diagnostic?: DomDiagnostic };
