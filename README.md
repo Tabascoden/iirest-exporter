@@ -13,8 +13,19 @@ Chrome Extension MVP для поиска товаров в авторизова�
 npm install
 npm run dev
 npm run build
+npm run build:yandex
 npm test
 ```
+
+## Локальная установка в Яндекс Браузер
+
+1. Выполнить `npm install`.
+2. Выполнить `npm run build:yandex`.
+3. Для разработки можно открыть `browser://extensions`, включить `Режим разработчика`, нажать `Загрузить распакованное расширение` и выбрать папку `.output/yandex-mv3`.
+4. Нажать иконку `iiRest Exporter (Yandex Browser)`.
+5. Рабочий интерфейс откроется в отдельной вкладке расширения.
+
+Для пользовательского пакета выполнить `npm run release:yandex` и передать папку `FOR_USER/iiRest Exporter Yandex`. Внутри будет файл `iiRest Exporter Yandex.crx`; его нужно перетащить в окно Яндекс Браузера на странице `browser://tune`. Яндекс Браузер может отключать расширения из непроверенных источников после перезапуска; в этом случае пользователь должен включить расширение снова на `browser://tune`. Для постоянного включения нужна публикация в Chrome Web Store или Opera Add-ons. См. справку Яндекса: [Extensions](https://browser.yandex.ru/help/en/personalization/extension) и [Extensions security](https://yandex.com/support/browser/en/security/check-extensions?lang=en).
 
 ## Локальная установка в Chrome
 

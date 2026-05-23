@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
+    "build:yandex": "wxt build --browser yandex",
     "release:user": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-user-release.ps1",
+    "release:yandex": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-user-release.ps1 -Browser yandex",
     "zip": "wxt zip",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
