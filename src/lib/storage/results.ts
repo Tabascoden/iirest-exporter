@@ -22,7 +22,7 @@ export interface ExtensionState {
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
-  selectedSuppliers: ["gfc", "smartpro", "metro"],
+  selectedSuppliers: ["gfc", "smartpro", "metro", "sweetlife"],
   includeTechnicalColumns: true,
   maxPagesPerQuery: 25,
   delayBetweenQueriesMs: 0,

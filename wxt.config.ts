@@ -7,6 +7,8 @@ const hostPermissions = [
   "https://*.smartpro.ru/*",
   "https://metro-cc.ru/*",
   "https://*.metro-cc.ru/*",
+  "https://swlife.ru/*",
+  "https://*.swlife.ru/*",
   "https://app.iirest.ru/*",
   "https://iirest.ru/*",
   "https://*.iirest.ru/*",
@@ -33,7 +35,7 @@ export default defineConfig({
       name,
       version: "0.1.0",
       description: "Searches supplier marketplaces and exports found products to CSV.",
-      permissions: ["storage", "tabs", "scripting", "downloads", ...(isYandex ? [] : ["sidePanel"])],
+      permissions: ["storage", "tabs", "scripting", "downloads"],
       host_permissions: hostPermissions,
       icons,
       action: {
@@ -42,14 +44,7 @@ export default defineConfig({
           "16": icons["16"],
           "32": icons["32"]
         }
-      },
-      ...(isYandex
-        ? {}
-        : {
-            side_panel: {
-              default_path: "sidepanel.html"
-            }
-          })
+      }
     };
   }
 });

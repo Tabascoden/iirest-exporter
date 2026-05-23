@@ -15,6 +15,8 @@ export default defineContentScript({
     "https://*.smartpro.ru/*",
     "https://metro-cc.ru/*",
     "https://*.metro-cc.ru/*",
+    "https://swlife.ru/*",
+    "https://*.swlife.ru/*",
     "https://iirest.ru/*",
     "https://*.iirest.ru/*",
     "http://localhost/*",

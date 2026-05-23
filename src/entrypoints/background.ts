@@ -34,7 +34,7 @@ import { sleep } from "../lib/utils/sleep";
 const MAX_LOGS = 300;
 const MIN_COLLECTION_PAGES = 25;
 const EXTENSION_PANEL_PAGE = "panel.html";
-const VISIBLE_TAB_SUPPLIERS = new Set<SupplierId>(["gfc", "smartpro", "metro"]);
+const VISIBLE_TAB_SUPPLIERS = new Set<SupplierId>(["gfc", "smartpro", "metro", "sweetlife"]);
 
 interface ActivePurchaseTask {
   supplierId: SupplierId;
@@ -68,23 +68,8 @@ interface ActiveRun {
 let activeRun: ActiveRun | null = null;
 
 export default defineBackground(() => {
-  chrome.runtime.onInstalled.addListener(() => {
-    const sidePanel = getSidePanelApi();
-    if (sidePanel?.setPanelBehavior) {
-      void sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
-    }
-  });
-
   chrome.action.onClicked.addListener((tab) => {
     if (tab.windowId == null) {
-      return;
-    }
-
-    const sidePanel = getSidePanelApi();
-    if (sidePanel?.open) {
-      void sidePanel.open({ windowId: tab.windowId }).catch(() => {
-        void openPanelTab(tab.windowId);
-      });
       return;
     }
 
@@ -108,14 +93,6 @@ export default defineBackground(() => {
     return true;
   });
 });
-
-function getSidePanelApi(): typeof chrome.sidePanel | undefined {
-  if (import.meta.env.BROWSER === "yandex") {
-    return undefined;
-  }
-
-  return chrome.sidePanel;
-}
 
 async function openPanelTab(windowId: number): Promise<void> {
   await tabsCreate({
